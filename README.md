@@ -1,7 +1,7 @@
 # FITito v2.0
 
 Aplicación de gimnasio React Native con Expo SDK 54, arquitectura escalable y
-mejores prácticas.
+mejores prácticas. Estructura organizada siguiendo el patrón mobile/backend.
 
 ## 🚀 Tecnologías
 
@@ -14,24 +14,34 @@ mejores prácticas.
 ## 📁 Estructura del Proyecto
 
 ```
-src/
-├── app/                    # Expo Router screens (solo routing)
-├── features/               # Módulos organizados por dominio
-│   ├── auth/              # Autenticación
-│   ├── routines/          # Rutinas de entrenamiento
-│   ├── exercises/         # Ejercicios
-│   ├── training-sessions/ # Sesiones de entrenamiento
-│   └── profile/           # Perfil de usuario
-├── components/            # Componentes reutilizables
-│   ├── ui/               # Componentes base (Button, Input, etc.)
-│   ├── forms/            # Componentes de formularios
-│   └── layout/           # Componentes de layout
-├── hooks/                 # Hooks compartidos/globales
-├── services/              # Servicios globales (API, storage, etc.)
-├── store/                 # Estado global
-├── utils/                 # Utilidades y helpers
-├── types/                 # Tipos TypeScript globales
-└── constants/             # Constantes globales
+FITito-v2/
+├── mobile/                    # Aplicación React Native
+│   ├── src/
+│   │   ├── features/          # Módulos organizados por dominio
+│   │   │   ├── auth/          # Autenticación
+│   │   │   ├── routines/      # Rutinas de entrenamiento
+│   │   │   ├── exercises/     # Ejercicios
+│   │   │   ├── training-sessions/ # Sesiones de entrenamiento
+│   │   │   └── profile/       # Perfil de usuario
+│   │   ├── components/        # Componentes reutilizables
+│   │   │   ├── ui/           # Componentes base (Button, Input, etc.)
+│   │   │   ├── forms/        # Componentes de formularios
+│   │   │   └── layout/       # Componentes de layout
+│   │   ├── hooks/             # Hooks compartidos/globales
+│   │   ├── services/          # Servicios globales (API, storage, etc.)
+│   │   ├── store/             # Estado global
+│   │   ├── utils/             # Utilidades y helpers
+│   │   ├── types/             # Tipos TypeScript globales
+│   │   └── constants/         # Constantes globales
+│   ├── App.tsx               # Componente raíz
+│   ├── package.json          # Dependencias mobile
+│   ├── app.json              # Configuración Expo
+│   ├── metro.config.js       # Configuración Metro
+│   ├── tsconfig.json         # Configuración TypeScript
+│   └── assets/               # Recursos estáticos
+├── .git/                     # Control de versiones
+├── .gitignore               # Archivos ignorados por git
+└── README.md                # Documentación
 ```
 
 ### Estructura de Features
@@ -50,8 +60,11 @@ features/[feature-name]/
 
 ## 🛠️ Scripts Disponibles
 
+**Nota:** Todos los comandos deben ejecutarse desde el directorio `mobile/`
+
 ```bash
 # Desarrollo
+cd mobile
 npm run dev          # Iniciar servidor de desarrollo
 npm start            # Alias para dev
 
@@ -101,18 +114,20 @@ import { Button } from '../../../components/ui/Button';
 
    ```bash
    git clone [repo-url]
-   cd FITito-v2
+   cd FITito-v2/mobile
    npm install
    ```
 
 2. **Ejecutar en modo desarrollo:**
 
    ```bash
+   cd mobile
    npm run dev
    ```
 
 3. **Verificar configuración:**
    ```bash
+   cd mobile
    npm run lint
    npm run type-check
    npm run format:check
@@ -136,14 +151,15 @@ Los siguientes checks se ejecutan automáticamente antes de cada commit:
 
 ## 🎯 Próximos Pasos
 
-Este es el **Entregable #1** del plan de desarrollo. Los siguientes entregables
-incluirán:
+Este proyecto ahora sigue la estructura mobile/backend de GastOn. Los siguientes
+entregables incluirán:
 
 1. ✅ **Entregable #1**: Inicialización y estructura base
-2. 🔄 **Entregable #2**: Setup del backend con Node.js + Fastify
-3. 🔄 **Entregable #3**: Configuración de PostgreSQL + Prisma
-4. 🔄 **Entregable #4**: Sistema de autenticación JWT
-5. 🔄 **Entregable #5**: Docker development environment
+2. ✅ **Reorganización**: Estructura mobile/backend implementada
+3. 🔄 **Entregable #2**: Setup del backend con Node.js + Fastify
+4. 🔄 **Entregable #3**: Configuración de PostgreSQL + Prisma
+5. 🔄 **Entregable #4**: Sistema de autenticación JWT
+6. 🔄 **Entregable #5**: Docker development environment
 
 ## 📝 Convenciones
 
