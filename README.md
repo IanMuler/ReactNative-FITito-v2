@@ -156,8 +156,8 @@ entregables incluirán:
 
 1. ✅ **Entregable #1**: Inicialización y estructura base
 2. ✅ **Reorganización**: Estructura mobile/backend implementada
-3. 🔄 **Entregable #2**: Setup del backend con Node.js + Fastify
-4. 🔄 **Entregable #3**: Configuración de PostgreSQL + Prisma
+3. ✅ **Entregable #2**: Setup del backend con Express.js + Clean Architecture
+4. 🔄 **Entregable #3**: Configuración de PostgreSQL + Cliente nativo
 5. 🔄 **Entregable #4**: Sistema de autenticación JWT
 6. 🔄 **Entregable #5**: Docker development environment
 

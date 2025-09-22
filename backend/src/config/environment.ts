@@ -67,6 +67,19 @@ export const config = {
     origin: getEnvVar('CORS_ORIGIN', 'http://localhost:8081'),
     credentials: getEnvBoolean('CORS_CREDENTIALS', true),
   },
+
+  database: {
+    url: getEnvVar('DATABASE_URL', 'postgresql://fitito_user:fitito_password@localhost:5432/fitito_dev'),
+    host: getEnvVar('DB_HOST', 'localhost'),
+    port: getEnvNumber('DB_PORT', 5432),
+    name: getEnvVar('DB_NAME', 'fitito_dev'),
+    user: getEnvVar('DB_USER', 'fitito_user'),
+    password: getEnvVar('DB_PASSWORD', 'fitito_password'),
+    ssl: getEnvBoolean('DB_SSL', false),
+    maxConnections: getEnvNumber('DB_MAX_CONNECTIONS', 20),
+    idleTimeoutMs: getEnvNumber('DB_IDLE_TIMEOUT_MS', 30000),
+    connectionTimeoutMs: getEnvNumber('DB_CONNECTION_TIMEOUT_MS', 2000),
+  },
 } as const;
 
 // Export types for type safety
@@ -74,3 +87,4 @@ export type Config = typeof config;
 export type ServerConfig = typeof config.server;
 export type ApiConfig = typeof config.api;
 export type SecurityConfig = typeof config.security;
+export type DatabaseConfig = typeof config.database;

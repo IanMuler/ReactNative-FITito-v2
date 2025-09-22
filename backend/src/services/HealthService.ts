@@ -1,6 +1,7 @@
 import { ServiceResult, HealthCheckResponse } from '@/types/common';
 import { config } from '@/config/environment';
 import { createError } from '@/middleware/errorHandler';
+import { query } from '@/config/database';
 
 /**
  * Health Service
@@ -163,13 +164,18 @@ export class HealthService {
   }
 
   /**
-   * Check database connectivity (placeholder)
+   * Check database connectivity
    */
   private async checkDatabase(): Promise<'connected' | 'disconnected'> {
     try {
-      // TODO: Implement actual database health check when DB is added
-      // For now, always return connected since we don't have a DB yet
-      return 'connected';
+      // Test basic connection with a simple query
+      const result = await query('SELECT 1 as health_check');
+      
+      if (result.rows.length > 0 && result.rows[0].health_check === 1) {
+        return 'connected';
+      }
+      
+      return 'disconnected';
     } catch (error) {
       console.error('Database health check failed:', error);
       return 'disconnected';

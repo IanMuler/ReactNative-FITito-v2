@@ -9,8 +9,8 @@ import { config } from '@/config/environment';
 import { requestIdMiddleware, requestLogger, errorLogger } from '@/middleware/requestLogger';
 import { errorHandler, notFoundHandler } from '@/middleware/errorHandler';
 
-// Import routes (to be created)
-// import { healthRoutes } from '@/routes/health';
+// Import database utilities
+import { query } from '@/config/database';
 
 // Create Express application
 const app: Application = express();
@@ -89,26 +89,49 @@ app.use(compression({
 app.use(requestIdMiddleware);
 app.use(requestLogger);
 
-// Health check endpoint (simple implementation)
-app.get('/health', (_req, res) => {
-  const healthCheck = {
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    environment: config.server.nodeEnv,
-    version: process.env['npm_package_version'] || '1.0.0',
-    services: {
-      // Add service checks here when implemented
-      // database: 'connected',
-    },
-  };
+// Health check endpoints with database connectivity
+app.get('/health', async (_req, res) => {
+  try {
+    // Test database connection
+    const dbResult = await query('SELECT 1 as health_check');
+    const isDatabaseConnected = dbResult.rows.length > 0 && dbResult.rows[0].health_check === 1;
 
-  res.status(200).json({
-    success: true,
-    data: healthCheck,
-    message: 'Service is healthy',
-    timestamp: new Date().toISOString(),
-  });
+    const healthCheck = {
+      status: isDatabaseConnected ? 'healthy' : 'unhealthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      environment: config.server.nodeEnv,
+      version: process.env['npm_package_version'] || '1.0.0',
+      services: {
+        database: isDatabaseConnected ? 'connected' : 'disconnected',
+      },
+    };
+
+    const statusCode = isDatabaseConnected ? 200 : 503;
+    res.status(statusCode).json({
+      success: isDatabaseConnected,
+      data: healthCheck,
+      message: `Service is ${isDatabaseConnected ? 'healthy' : 'unhealthy'}`,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    res.status(503).json({
+      success: false,
+      data: {
+        status: 'unhealthy',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        environment: config.server.nodeEnv,
+        version: process.env['npm_package_version'] || '1.0.0',
+        services: {
+          database: 'disconnected',
+        },
+      },
+      message: 'Service is unhealthy - database connection failed',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString(),
+    });
+  }
 });
 
 // API routes (placeholder)
