@@ -1,222 +1,94 @@
-import express, { Application } from 'express';
+import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import compression from 'compression';
-import rateLimit from 'express-rate-limit';
-
-// Import configuration and middleware
-import { config } from '@/config/environment';
-import { requestIdMiddleware, requestLogger, errorLogger } from '@/middleware/requestLogger';
-import { errorHandler, notFoundHandler } from '@/middleware/errorHandler';
-
-// Import database utilities
-import { query } from '@/config/database';
+import morgan from 'morgan';
+import { exerciseRoutes } from './routes/exerciseRoutes';
+import { pool } from './config/database';
 
 // Create Express application
 const app: Application = express();
 
-// Trust proxy for accurate IP addresses (important for rate limiting)
-app.set('trust proxy', 1);
+// Middleware
+app.use(helmet()); // Security headers
+app.use(cors()); // Enable CORS
+app.use(morgan('combined')); // Logging
+app.use(express.json({ limit: '10mb' })); // Parse JSON bodies
+app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 
-// Security middleware
-app.use(helmet({
-  crossOriginEmbedderPolicy: false, // Disable for development
-  contentSecurityPolicy: config.server.isDevelopment ? false : {
-    directives: {
-      defaultSrc: ["'self'"],
-    },
-  },
-}));
-
-// CORS configuration
-app.use(cors({
-  origin: config.cors.origin,
-  credentials: config.cors.credentials,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: [
-    'Origin',
-    'X-Requested-With',
-    'Content-Type',
-    'Accept',
-    'Authorization',
-    'X-Request-ID',
-  ],
-}));
-
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: config.rateLimit.windowMs,
-  max: config.rateLimit.maxRequests,
-  message: {
-    error: 'Too many requests from this IP, please try again later.',
-    retryAfter: Math.ceil(config.rateLimit.windowMs / 1000),
-  },
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-  skip: (req) => {
-    // Skip rate limiting for health checks
-    return req.url.includes('/health');
-  },
-});
-
-app.use(limiter);
-
-// Body parsing middleware
-app.use(express.json({ 
-  limit: '10mb',
-  strict: true,
-}));
-app.use(express.urlencoded({ 
-  extended: true, 
-  limit: '10mb',
-}));
-
-// Compression middleware
-app.use(compression({
-  level: 6, // Compression level (0-9)
-  threshold: 1024, // Only compress if response is larger than 1KB
-  filter: (req, res) => {
-    // Don't compress if client doesn't support it
-    if (req.headers['x-no-compression']) {
-      return false;
-    }
-    // Use compression filter function
-    return compression.filter(req, res);
-  },
-}));
-
-// Request logging and tracking
-app.use(requestIdMiddleware);
-app.use(requestLogger);
-
-// Health check endpoints with database connectivity
-app.get('/health', async (_req, res) => {
+// Health check endpoint
+app.get('/health', async (_req: Request, res: Response) => {
   try {
     // Test database connection
-    const dbResult = await query('SELECT 1 as health_check');
-    const isDatabaseConnected = dbResult.rows.length > 0 && dbResult.rows[0].health_check === 1;
-
-    const healthCheck = {
-      status: isDatabaseConnected ? 'healthy' : 'unhealthy',
+    await pool.query('SELECT 1');
+    
+    res.status(200).json({
+      success: true,
+      message: 'Server is healthy',
       timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-      environment: config.server.nodeEnv,
-      version: process.env['npm_package_version'] || '1.0.0',
-      services: {
-        database: isDatabaseConnected ? 'connected' : 'disconnected',
-      },
-    };
-
-    const statusCode = isDatabaseConnected ? 200 : 503;
-    res.status(statusCode).json({
-      success: isDatabaseConnected,
-      data: healthCheck,
-      message: `Service is ${isDatabaseConnected ? 'healthy' : 'unhealthy'}`,
-      timestamp: new Date().toISOString(),
+      database: 'connected'
     });
   } catch (error) {
     res.status(503).json({
       success: false,
-      data: {
-        status: 'unhealthy',
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime(),
-        environment: config.server.nodeEnv,
-        version: process.env['npm_package_version'] || '1.0.0',
-        services: {
-          database: 'disconnected',
-        },
-      },
-      message: 'Service is unhealthy - database connection failed',
-      error: error instanceof Error ? error.message : 'Unknown error',
+      message: 'Server is unhealthy',
       timestamp: new Date().toISOString(),
+      database: 'disconnected',
+      error: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
 
-// API routes (placeholder)
-app.get(config.api.baseUrl, (_req, res) => {
-  res.status(200).json({
-    success: true,
-    data: {
-      message: 'FITito API v2.0',
-      version: config.api.version,
-      environment: config.server.nodeEnv,
-      endpoints: {
-        health: '/health',
-        api: config.api.baseUrl,
+// API routes
+app.use('/api/v1/exercises', exerciseRoutes);
+
+// 404 handler
+app.use('*', (req: Request, res: Response) => {
+  res.status(404).json({
+    success: false,
+    error: 'Not Found',
+    message: `Route ${req.originalUrl} not found`,
+    availableRoutes: {
+      exercises: {
+        'GET /api/v1/exercises': 'Get all exercises with filters',
+        'GET /api/v1/exercises/:id': 'Get exercise by ID',
+        'GET /api/v1/exercises/category/:category': 'Get exercises by category',
+        'GET /api/v1/exercises/search': 'Search exercises',
+        'GET /api/v1/exercises/metadata': 'Get exercise metadata',
+        'GET /api/v1/exercises/stats': 'Get exercise statistics',
+        'POST /api/v1/exercises': 'Create new exercise',
+        'PUT /api/v1/exercises/:id': 'Update exercise',
+        'DELETE /api/v1/exercises/:id': 'Delete exercise'
       },
-    },
-    timestamp: new Date().toISOString(),
+      health: {
+        'GET /health': 'Health check endpoint'
+      }
+    }
   });
 });
 
-// Mount API routes (to be implemented)
-// app.use('/health', healthRoutes);
-// app.use(config.api.baseUrl + '/users', userRoutes);
-// app.use(config.api.baseUrl + '/exercises', exerciseRoutes);
-// app.use(config.api.baseUrl + '/routines', routineRoutes);
-
-// Error logging middleware (must be before error handler)
-app.use(errorLogger);
-
-// 404 handler for unmatched routes
-app.use(notFoundHandler);
-
-// Global error handler (must be last)
-app.use(errorHandler);
-
-// Start server function
-const startServer = (): void => {
-  const server = app.listen(config.server.port, config.server.host, () => {
-    console.log(`
-🚀 FITito Backend Server Started
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 Environment: ${config.server.nodeEnv.toUpperCase()}
-🌍 Server URL: http://${config.server.host}:${config.server.port}
-🏥 Health Check: http://${config.server.host}:${config.server.port}/health
-🔗 API Base URL: http://${config.server.host}:${config.server.port}${config.api.baseUrl}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-`);
+// Global error handler
+app.use((error: Error, _req: Request, res: Response, _next: NextFunction) => {
+  console.error('Unhandled error:', error);
+  
+  res.status(500).json({
+    success: false,
+    error: 'Internal Server Error',
+    message: 'An unexpected error occurred',
+    ...(process.env['NODE_ENV'] === 'development' && { stack: error.stack })
   });
+});
 
-  // Graceful shutdown
-  const gracefulShutdown = (signal: string) => {
-    console.log(`\n⚠️ Received ${signal}. Starting graceful shutdown...`);
-    
-    server.close((err) => {
-      if (err) {
-        console.error('❌ Error during server shutdown:', err);
-        process.exit(1);
-      }
-      
-      console.log('✅ Server closed successfully');
-      // Close database connections here when implemented
-      process.exit(0);
-    });
-  };
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  await pool.end();
+  process.exit(0);
+});
 
-  // Handle shutdown signals
-  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGINT', async () => {
+  console.log('SIGINT received, shutting down gracefully');
+  await pool.end();
+  process.exit(0);
+});
 
-  // Handle unhandled promise rejections
-  process.on('unhandledRejection', (reason, promise) => {
-    console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
-    gracefulShutdown('unhandledRejection');
-  });
-
-  // Handle uncaught exceptions
-  process.on('uncaughtException', (error) => {
-    console.error('❌ Uncaught Exception:', error);
-    gracefulShutdown('uncaughtException');
-  });
-};
-
-// Start the server if this file is run directly
-if (require.main === module) {
-  startServer();
-}
-
-// Export app for testing
 export default app;
