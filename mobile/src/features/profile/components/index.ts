@@ -1,1 +1,1 @@
-// profile components will be exported here
+export { default as ProfileSwitch } from './ProfileSwitch';

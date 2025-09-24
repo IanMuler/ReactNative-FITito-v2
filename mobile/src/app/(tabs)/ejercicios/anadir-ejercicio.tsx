@@ -1,38 +1,23 @@
-// app/(tabs)/ejercicios/anadir-ejercicio.tsx
-import React, { useState, useEffect } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  Image,
-  ScrollView,
-  Alert,
-} from "react-native";
-import * as ImagePicker from "expo-image-picker";
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import RadialGradientBackground from "@/components/RadialGradientBackground";
-import { exerciseApi } from "@/services/exerciseApi";
-import { useRouter, useLocalSearchParams } from "expo-router";
-import Toast from 'react-native-toast-message';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Image, ScrollView, Alert } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import RadialGradientBackground from '@/components/RadialGradientBackground';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useExerciseActions, useExerciseList } from '@/features/exercises/hooks';
+import { Exercise } from '@/features/exercises/types';
 
-const AddExerciseScreen = () => {
-  const { id, name, image } = useLocalSearchParams<{
-    id?: string;
-    name?: string;
-    image?: string;
+const AddExercisePage: React.FC = () => {
+  const { name, image } = useLocalSearchParams<{
+    name: string;
+    image: string;
   }>();
   
   const [exerciseName, setExerciseName] = useState(name || "");
-  const [exerciseImage, setExerciseImage] = useState<string | null>(
-    image || null
-  );
+  const [exerciseImage, setExerciseImage] = useState<string | null>(image || null);
   const router = useRouter();
-  const queryClient = useQueryClient();
-
-  // Check if we're editing (id exists) or creating
-  const isEditing = !!id;
+  
+  const { exercises } = useExerciseList();
+  const { createExercise, updateExercise } = useExerciseActions();
 
   useEffect(() => {
     if (name && image) {
@@ -40,49 +25,6 @@ const AddExerciseScreen = () => {
       setExerciseImage(image as string);
     }
   }, [name, image]);
-
-  // Create mutation
-  const createMutation = useMutation({
-    mutationFn: exerciseApi.create,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['exercises'] });
-      Toast.show({
-        type: 'success',
-        text1: 'Ejercicio creado',
-        text2: 'El ejercicio se creó correctamente',
-      });
-      router.back();
-    },
-    onError: (error: any) => {
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: error.message || 'Error al crear el ejercicio',
-      });
-    },
-  });
-
-  // Update mutation
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: { name: string; image: string } }) => 
-      exerciseApi.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['exercises'] });
-      Toast.show({
-        type: 'success',
-        text1: 'Ejercicio actualizado',
-        text2: 'El ejercicio se actualizó correctamente',
-      });
-      router.back();
-    },
-    onError: (error: any) => {
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: error.message || 'Error al actualizar el ejercicio',
-      });
-    },
-  });
 
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
@@ -98,34 +40,43 @@ const AddExerciseScreen = () => {
   };
 
   const saveExercise = async () => {
-    if (!exerciseName.trim() || !exerciseImage) {
-      Alert.alert("Error", "Por favor completa todos los campos");
-      return;
-    }
-
-    const exerciseData = {
-      name: exerciseName.trim(),
+    if (!exerciseImage) return; // Add guard for null image
+    
+    const newExercise = {
+      name: exerciseName,
       image: exerciseImage,
     };
 
-    if (isEditing && id) {
-      updateMutation.mutate({
-        id: parseInt(id),
-        data: exerciseData,
-      });
-    } else {
-      createMutation.mutate(exerciseData);
-    }
-  };
+    const nameExists = exercises.some(
+      (exercise: Exercise) =>
+        exercise.name === exerciseName && exercise.name !== name
+    );
 
-  const isLoading = createMutation.isPending || updateMutation.isPending;
+    if (nameExists) {
+      Alert.alert("Error", "Ya existe un ejercicio con ese nombre.");
+      return;
+    }
+
+    if (name) {
+      // Editing existing exercise - find by name and update
+      const exerciseToUpdate = exercises.find(ex => ex.name === name);
+      if (exerciseToUpdate) {
+        await updateExercise(exerciseToUpdate.id, newExercise);
+      }
+    } else {
+      // Creating new exercise
+      await createExercise(newExercise);
+    }
+    
+    router.back();
+  };
 
   return (
     <View style={styles.container}>
       <RadialGradientBackground />
       <ScrollView>
         <Text testID="title" style={styles.title}>
-          {isEditing ? "Editar ejercicio" : "Añadir ejercicio"}
+          {name ? "Editar ejercicio" : "Añadir ejercicio"}
         </Text>
         <View>
           <Text style={styles.label}>Nombre:</Text>
@@ -136,17 +87,11 @@ const AddExerciseScreen = () => {
             placeholderTextColor="#A5A5A5"
             value={exerciseName}
             onChangeText={setExerciseName}
-            editable={!isLoading}
           />
         </View>
         <View>
           <Text style={styles.label}>Imagen:</Text>
-          <TouchableOpacity 
-            testID="button-pick-image" 
-            style={[styles.imagePicker, isLoading && styles.disabled]} 
-            onPress={pickImage}
-            disabled={isLoading}
-          >
+          <TouchableOpacity testID="button-pick-image" style={styles.imagePicker} onPress={pickImage}>
             <Text style={styles.imagePickerText}>Seleccionar Imagen</Text>
           </TouchableOpacity>
           {exerciseImage && (
@@ -162,16 +107,13 @@ const AddExerciseScreen = () => {
         testID="button-save-exercise"
         style={[
           styles.button,
-          ((!exerciseName || !exerciseImage) || isLoading) && styles.buttonDisabled,
+          (!exerciseName || !exerciseImage) && styles.buttonDisabled,
         ]}
         onPress={saveExercise}
-        disabled={!exerciseName || !exerciseImage || isLoading}
+        disabled={!exerciseName || !exerciseImage}
       >
         <Text style={styles.buttonText} testID="button-save-exercise-text">
-          {isLoading 
-            ? (isEditing ? "Guardando..." : "Añadiendo...") 
-            : (isEditing ? "Guardar cambios" : "Añadir")
-          }
+          {name ? "Guardar cambios" : "Añadir"}
         </Text>
       </TouchableOpacity>
     </View>
@@ -231,9 +173,6 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     backgroundColor: "#A5A5A5",
   },
-  disabled: {
-    opacity: 0.5,
-  },
   buttonText: {
     color: "#FFFFFF",
     fontSize: 18,
@@ -241,4 +180,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default AddExerciseScreen;
+export default AddExercisePage;

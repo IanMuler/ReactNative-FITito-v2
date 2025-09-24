@@ -1,1 +1,1 @@
-// exercises services will be exported here
+export * from './exerciseApi';

@@ -195,11 +195,11 @@ const Menu = ({ trigger, children }: MenuProps) => {
                                     return React.cloneElement(childrenItem as React.ReactElement, {
                                         key: index,
                                         closeModal,
-                                    });
+                                    } as any);
                                 })
                                 : React.cloneElement(children as React.ReactElement, {
                                     closeModal,
-                                })}
+                                } as any)}
                         </Animated.View>
                     </TouchableOpacity>
                 </Portal>

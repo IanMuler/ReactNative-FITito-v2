@@ -1,106 +1,51 @@
-// app/(tabs)/ejercicios/index.tsx
-import React, { useState, useCallback } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Image,
-  Modal,
-  RefreshControl,
-} from "react-native";
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import LinearGradientItem from "@/components/LinearGradientItem";
-import RadialGradientBackground from "@/components/RadialGradientBackground";
-import { useRouter } from "expo-router";
-import { exerciseApi } from "@/services/exerciseApi";
-import { Ionicons } from "@expo/vector-icons";
-import Menu, { MenuItem } from "@/components/Menu";
-import { Exercise } from "@/types/exercise";
-import Toast from 'react-native-toast-message';
+import React, { useState, useCallback } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, Image, Modal, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import RadialGradientBackground from '@/components/RadialGradientBackground';
+import LinearGradientItem from '@/components/LinearGradientItem';
+import Menu, { MenuItem } from '@/components/Menu';
+import { useExerciseList, useExerciseActions } from '@/features/exercises/hooks';
+import { Exercise } from '@/features/exercises/types';
 
-const ExercisesScreen = () => {
+const ExercisesPage: React.FC = () => {
+  const router = useRouter();
+  
+  /* State */
   const [modalVisible, setModalVisible] = useState(false);
   const [exerciseToDelete, setExerciseToDelete] = useState<Exercise | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const router = useRouter();
-  const queryClient = useQueryClient();
-
-  // Fetch exercises using React Query
-  const { data: exercises = [], isLoading, error } = useQuery({
-    queryKey: ['exercises'],
-    queryFn: exerciseApi.getAll,
-  });
-
-  // Delete mutation
-  const deleteMutation = useMutation({
-    mutationFn: exerciseApi.delete,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['exercises'] });
-      setModalVisible(false);
-      setExerciseToDelete(null);
-      Toast.show({
-        type: 'success',
-        text1: 'Ejercicio eliminado',
-        text2: 'El ejercicio se eliminó correctamente',
-      });
-    },
-    onError: () => {
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: 'No se pudo eliminar el ejercicio',
-      });
-    },
-  });
-
-  // Pull to refresh function
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await queryClient.invalidateQueries({ queryKey: ['exercises'] });
-    setRefreshing(false);
-  }, [queryClient]);
-
-  const deleteExercise = async () => {
-    if (exerciseToDelete) {
-      deleteMutation.mutate(exerciseToDelete.id);
-    }
-  };
-
-  const handleEditExercise = (exercise: Exercise) => {
+  
+  /* Business Logic Hooks */
+  const { exercises } = useExerciseList();
+  const { deleteExercise } = useExerciseActions();
+  
+  /* Event Handlers */
+  const handleEditExercise = useCallback((exercise: Exercise) => {
     router.push({
       pathname: "/ejercicios/anadir-ejercicio",
       params: { 
-        id: exercise.id.toString(), 
         name: exercise.name, 
         image: exercise.image 
       },
     });
-  };
-
-  const options = (exercise: Exercise) => [
+  }, [router]);
+  
+  const handleDeleteExercise = useCallback(async () => {
+    if (exerciseToDelete) {
+      await deleteExercise(exerciseToDelete.id);
+      setModalVisible(false);
+    }
+  }, [exerciseToDelete, deleteExercise]);
+  
+  const openDeleteModal = useCallback((exercise: Exercise) => {
+    setExerciseToDelete(exercise);
+    setModalVisible(true);
+  }, []);
+  
+  const options = useCallback((exercise: Exercise) => [
     { label: "Editar", onPress: () => handleEditExercise(exercise), testID: "menu-option-edit" },
-    { label: "Eliminar", onPress: () => { setExerciseToDelete(exercise); setModalVisible(true); }, testID: "menu-option-delete" },
-  ];
-
-  if (isLoading) {
-    return (
-      <View style={[styles.container, styles.centered]}>
-        <RadialGradientBackground />
-        <Text style={styles.loadingText}>Cargando ejercicios...</Text>
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View style={[styles.container, styles.centered]}>
-        <RadialGradientBackground />
-        <Text style={styles.errorText}>Error al cargar ejercicios</Text>
-      </View>
-    );
-  }
+    { label: "Eliminar", onPress: () => openDeleteModal(exercise), testID: "menu-option-delete" },
+  ], [handleEditExercise, openDeleteModal]);
 
   return (
     <View style={styles.container} testID="exercises-screen">
@@ -108,21 +53,11 @@ const ExercisesScreen = () => {
       <View style={styles.header}>
         <Text style={styles.title}>Ejercicios</Text>
       </View>
-      <ScrollView 
-        contentContainerStyle={styles.scrollViewContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#FFFFFF"
-            colors={["#2979FF"]}
-          />
-        }
-      >
+      <ScrollView contentContainerStyle={styles.scrollViewContent}>
         {exercises.map((exercise, index) => (
           <LinearGradientItem
-            key={exercise.id}
-            styles={{ dayContainer: { ...styles.exerciseContainer, zIndex: -index } }} // zIndex to make sure the menu is on top
+            key={index}
+            styles={{ dayContainer: { ...styles.exerciseContainer, zIndex: -index } }}
           >
             <View style={styles.exerciseContent} testID={`exercise-${exercise.name}`}>
               <View style={styles.exerciseTextContainer}>
@@ -178,13 +113,10 @@ const ExercisesScreen = () => {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.modalButton}
-                  onPress={deleteExercise}
+                  onPress={handleDeleteExercise}
                   testID="confirm-delete"
-                  disabled={deleteMutation.isPending}
                 >
-                  <Text style={styles.modalButtonText}>
-                    {deleteMutation.isPending ? 'Eliminando...' : 'Eliminar'}
-                  </Text>
+                  <Text style={styles.modalButtonText}>Eliminar</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -200,10 +132,6 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
   },
-  centered: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   header: {
     marginTop: 20,
   },
@@ -212,14 +140,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "bold",
     marginBottom: 20,
-  },
-  loadingText: {
-    color: "#FFFFFF",
-    fontSize: 18,
-  },
-  errorText: {
-    color: "#FF6B6B",
-    fontSize: 18,
   },
   scrollViewContent: {
     flexGrow: 1,
@@ -313,4 +233,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ExercisesScreen;
+export default ExercisesPage;

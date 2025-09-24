@@ -2,7 +2,7 @@ import React from "react";
 import { View } from "react-native";
 import { Tabs } from "expo-router";
 import { TabBarIcon } from "@/components/navigation/TabBarIcon";
-import { Colors } from "@/constants/Colors";
+import { Colors } from "@/constants/colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import ProfileSwitch from "@/components/ProfileSwitch";
 
