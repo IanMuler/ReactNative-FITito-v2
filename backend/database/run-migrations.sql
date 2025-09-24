@@ -16,6 +16,9 @@
 \echo 'Running migration 004: Workout Sessions...'
 \i migrations/004-create-workout-sessions.sql
 
+\echo 'Running migration 005: Training Days...'
+\i migrations/005-create-training-days.sql
+
 -- Run seeds
 \echo 'Running seed 001: Exercises...'
 \i seeds/001-exercises-seed.sql
@@ -31,4 +34,5 @@ SELECT
     (SELECT count(*) FROM exercises) as total_exercises,
     (SELECT count(*) FROM users) as total_users,
     (SELECT count(*) FROM user_profiles) as total_profiles,
-    (SELECT count(*) FROM routines) as total_routines;
+    (SELECT count(*) FROM routines) as total_routines,
+    (SELECT count(*) FROM training_days) as total_training_days;

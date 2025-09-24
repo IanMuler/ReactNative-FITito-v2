@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Image, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Image, Modal, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import RadialGradientBackground from '@/components/RadialGradientBackground';
 import LinearGradientItem from '@/components/LinearGradientItem';
@@ -15,7 +15,7 @@ import { exerciseListStyles } from '@/features/exercises/styles';
 
 const ExercisesPage: React.FC = () => {
   /* Hooks  */
-  const { exercises } = useExerciseList();
+  const { exercises, refreshing, onRefresh } = useExerciseList();
   const { deleteExercise } = useExerciseActions();
   const { modalVisible, exerciseToDelete, openDeleteModal, closeModal } = useExerciseModal();
   const { navigateToAddExercise, navigateToEditExercise } = useExerciseNavigation();
@@ -40,7 +40,16 @@ const ExercisesPage: React.FC = () => {
   );
 
   const exerciseItems = (
-    <ScrollView contentContainerStyle={exerciseListStyles.scrollViewContent}>
+    <ScrollView 
+      contentContainerStyle={exerciseListStyles.scrollViewContent}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor="#FFFFFF"
+        />
+      }
+    >
       {exercises.map((exercise, index) => (
         <LinearGradientItem
           key={index}

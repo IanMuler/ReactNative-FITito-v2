@@ -8,7 +8,8 @@ import {
   validateExerciseImage 
 } from '../utils';
 import { CreateExerciseDto, Exercise } from '../types';
-import { useExerciseActions, useExerciseList } from './';
+import { useExerciseActions } from './useExerciseActions';
+import { useExerciseList } from './useExerciseList';
 import Toast from 'react-native-toast-message';
 
 interface ExerciseFormParams {

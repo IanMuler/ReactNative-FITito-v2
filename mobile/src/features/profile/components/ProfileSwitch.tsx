@@ -1,28 +1,37 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useProfile } from '../contexts/ProfileContext';
 
 export default function ProfileSwitch() {
-  const [activeProfile, setActiveProfile] = useState<'Ian' | 'Meli'>('Ian');
+  const { currentProfile, profiles, switchProfile } = useProfile();
 
-  const switchProfile = (profile: 'Ian' | 'Meli') => {
-    setActiveProfile(profile);
-    // TODO: Implementar lógica de cambio de perfil con backend
-    console.log(`Switched to profile: ${profile}`);
+  const handleProfileSwitch = () => {
+    if (!currentProfile) return;
+    
+    // Find the other profile (not current)
+    const otherProfile = profiles.find(p => p.id !== currentProfile.id);
+    if (otherProfile) {
+      switchProfile(otherProfile.id);
+    }
   };
+
+  if (!currentProfile) return null;
 
   return (
     <TouchableOpacity 
       style={styles.container} 
-      onPress={() => switchProfile(activeProfile === 'Ian' ? 'Meli' : 'Ian')}
+      onPress={handleProfileSwitch}
     >
       <LinearGradient
         colors={['#4c669f', '#3b5998', '#192f6a']}
         style={styles.gradient}
       >
         <Ionicons name="person" size={16} color="white" />
-        <Text style={styles.profileText}>{activeProfile}</Text>
+        <Text style={styles.profileText}>
+          {currentProfile.display_name || currentProfile.profile_name}
+        </Text>
         <Ionicons name="swap-horizontal" size={16} color="white" />
       </LinearGradient>
     </TouchableOpacity>

@@ -5,6 +5,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PortalProvider } from '@gorhom/portal';
 import Toast from 'react-native-toast-message';
+import { ProfileProvider } from '@/features/profile';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -37,10 +38,12 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <PortalProvider>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(tabs)" />
-        </Stack>
-        <Toast />
+        <ProfileProvider>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(tabs)" />
+          </Stack>
+          <Toast />
+        </ProfileProvider>
       </PortalProvider>
     </QueryClientProvider>
   );
