@@ -3,3 +3,6 @@ export * from './useExerciseList';
 export * from './useExerciseForm';
 export * from './useImagePicker';
 export * from './useExerciseFilters';
+export * from './useExerciseModal';
+export * from './useExerciseNavigation';
+export * from './useExerciseMenu';

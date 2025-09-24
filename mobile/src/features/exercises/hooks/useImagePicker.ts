@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { Alert } from 'react-native';
+import { validateExerciseImage } from '../utils';
 
 interface UseImagePickerOptions {
   allowsEditing?: boolean;
@@ -12,6 +13,7 @@ interface UseImagePickerOptions {
 
 export const useImagePicker = (options: UseImagePickerOptions = {}) => {
   const [isPickingImage, setIsPickingImage] = useState(false);
+  const [imageValidationError, setImageValidationError] = useState<string | null>(null);
   
   const {
     allowsEditing = true,
@@ -20,6 +22,20 @@ export const useImagePicker = (options: UseImagePickerOptions = {}) => {
     onImageSelected,
     onError,
   } = options;
+
+  /* Image validation */
+  const validateImage = useCallback((imageUri: string): boolean => {
+    const validation = validateExerciseImage(imageUri);
+    
+    if (!validation.isValid) {
+      setImageValidationError(validation.error || 'Imagen inválida');
+      onError?.(validation.error || 'Imagen inválida');
+      return false;
+    }
+    
+    setImageValidationError(null);
+    return true;
+  }, [onError]);
   
   const pickFromLibrary = useCallback(async () => {
     try {
@@ -46,8 +62,12 @@ export const useImagePicker = (options: UseImagePickerOptions = {}) => {
       
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const imageUri = result.assets[0].uri;
-        onImageSelected?.(imageUri);
-        return imageUri;
+        
+        if (validateImage(imageUri)) {
+          onImageSelected?.(imageUri);
+          return imageUri;
+        }
+        return null;
       }
       
       return null;
@@ -85,8 +105,12 @@ export const useImagePicker = (options: UseImagePickerOptions = {}) => {
       
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const imageUri = result.assets[0].uri;
-        onImageSelected?.(imageUri);
-        return imageUri;
+        
+        if (validateImage(imageUri)) {
+          onImageSelected?.(imageUri);
+          return imageUri;
+        }
+        return null;
       }
       
       return null;
@@ -123,8 +147,10 @@ export const useImagePicker = (options: UseImagePickerOptions = {}) => {
   
   return {
     isPickingImage,
+    imageValidationError,
     pickFromLibrary,
     pickFromCamera,
     showImagePickerOptions,
+    validateImage,
   };
 };

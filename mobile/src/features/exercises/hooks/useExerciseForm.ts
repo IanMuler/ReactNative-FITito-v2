@@ -8,6 +8,8 @@ import {
   validateExerciseImage 
 } from '../utils';
 import { CreateExerciseDto, Exercise } from '../types';
+import { useExerciseActions, useExerciseList } from './';
+import Toast from 'react-native-toast-message';
 
 interface ExerciseFormParams {
   id?: string;
@@ -19,6 +21,10 @@ export const useExerciseForm = () => {
   const router = useRouter();
   const params = useLocalSearchParams() as ExerciseFormParams;
   
+  /* Business Logic Hooks */
+  const { exercises } = useExerciseList();
+  const { createExercise, updateExercise } = useExerciseActions();
+  
   /* Form state */
   const [exerciseName, setExerciseName] = useState(params.name || "");
   const [exerciseImage, setExerciseImage] = useState<string | null>(params.image || null);
@@ -28,6 +34,19 @@ export const useExerciseForm = () => {
   const isEditing = !!params.id;
   const exerciseId = params.id ? parseInt(params.id) : undefined;
   
+  /* Duplicate name validation */
+  const checkDuplicateName = useCallback((name: string): boolean => {
+    if (!name.trim()) return false;
+    
+    const nameExists = exercises.some(
+      (exercise: Exercise) => 
+        exercise.name.toLowerCase() === name.toLowerCase() && 
+        exercise.name !== params.name
+    );
+    
+    return nameExists;
+  }, [exercises, params.name]);
+
   /* Form validation */
   const validateField = useCallback((field: 'name' | 'image', value: string | null) => {
     let validation;
@@ -57,6 +76,14 @@ export const useExerciseForm = () => {
       image: exerciseImage || '',
     };
     
+    // Check for duplicate names
+    if (checkDuplicateName(exerciseName)) {
+      const duplicateError = "Ya existe un ejercicio con ese nombre.";
+      setErrors(prev => ({ ...prev, name: duplicateError }));
+      Alert.alert("Error", duplicateError);
+      return false;
+    }
+    
     const validation = validateExerciseForm(formData);
     setErrors(validation.errors);
     
@@ -68,7 +95,7 @@ export const useExerciseForm = () => {
     }
     
     return validation.isValid;
-  }, [exerciseName, exerciseImage]);
+  }, [exerciseName, exerciseImage, checkDuplicateName]);
   
   /* Form handlers */
   const handleNameChange = useCallback((name: string) => {
@@ -104,6 +131,52 @@ export const useExerciseForm = () => {
     });
   }, [exerciseName, exerciseImage, validateForm]);
   
+  /* Save operations */
+  const saveExercise = useCallback(async (): Promise<boolean> => {
+    if (!validateForm()) {
+      return false;
+    }
+
+    const formData = getFormData();
+    if (!formData) {
+      return false;
+    }
+
+    try {
+      if (isEditing && params.name) {
+        // Editing existing exercise - find by name and update
+        const exerciseToUpdate = exercises.find(ex => ex.name === params.name);
+        if (exerciseToUpdate) {
+          await updateExercise(exerciseToUpdate.id, formData);
+          Toast.show({
+            type: 'success',
+            text1: 'Ejercicio actualizado',
+            text2: 'Los cambios se han guardado correctamente',
+          });
+        }
+      } else {
+        // Creating new exercise
+        await createExercise(formData);
+        Toast.show({
+          type: 'success',
+          text1: 'Ejercicio creado',
+          text2: 'El ejercicio se ha añadido correctamente',
+        });
+      }
+      
+      router.back();
+      return true;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: errorMessage,
+      });
+      return false;
+    }
+  }, [validateForm, getFormData, isEditing, params.name, exercises, updateExercise, createExercise, router]);
+
   /* Navigation helpers */
   const goBack = useCallback(() => {
     router.back();
@@ -140,6 +213,10 @@ export const useExerciseForm = () => {
     validateForm,
     resetForm,
     getFormData,
+    saveExercise,
     goBack,
+    
+    // Validation helpers
+    checkDuplicateName,
   };
 };
