@@ -19,6 +19,7 @@ export interface ProfileContextType {
   currentProfile: Profile | null;
   profiles: Profile[];
   isLoading: boolean;
+  profileId: number;
   switchProfile: (profileId: number) => void;
   refreshProfiles: () => void;
 }

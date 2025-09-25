@@ -1,86 +1,238 @@
-import React, { useState, ReactNode } from 'react';
-import { View, TouchableOpacity, StyleSheet, Modal, Text } from 'react-native';
+import React, { useState, useRef, useEffect, useMemo, ReactNode } from "react";
+import {
+    View,
+    Pressable,
+    StyleSheet,
+    Platform,
+    TouchableOpacity,
+    Text,
+    Dimensions,
+    Keyboard,
+    LayoutRectangle,
+    StatusBar,
+    Animated,
+} from "react-native";
+import { Portal } from "@gorhom/portal";
 
-interface MenuProps {
-  trigger: ReactNode;
-  children: ReactNode;
-}
+const { height: layoutHeight } = Dimensions.get("window");
 
-interface MenuItemProps {
-  text: string;
-  onPress: () => void;
-  testID?: string;
-}
+const useKeyboardHeight = () => {
+    const [keyboardHeight, setKeyboardHeight] = useState(0);
 
-export const MenuItem: React.FC<MenuItemProps> = ({ text, onPress, testID }) => {
-  return (
-    <TouchableOpacity style={styles.menuItem} onPress={onPress} testID={testID}>
-      <Text style={styles.menuItemText}>{text}</Text>
-    </TouchableOpacity>
-  );
+    useEffect(() => {
+        const handleKeyboardDidShow = (e: any) => {
+            setKeyboardHeight(e.endCoordinates.height);
+        };
+
+        const handleKeyboardDidHide = () => {
+            setKeyboardHeight(0);
+        };
+
+        const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+        const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+        const showSubscription = Keyboard.addListener(showEvent, handleKeyboardDidShow);
+        const hideSubscription = Keyboard.addListener(hideEvent, handleKeyboardDidHide);
+
+        return () => {
+            showSubscription.remove();
+            hideSubscription.remove();
+        };
+    }, []);
+
+    return { keyboardHeight };
 };
 
-const Menu: React.FC<MenuProps> = ({ trigger, children }) => {
-  const [visible, setVisible] = useState(false);
+type MenuProps = {
+    trigger: ReactNode;
+    children: ReactNode | ReactNode[];
+};
 
-  const handleClose = () => {
-    setVisible(false);
-  };
+type MenuItemProps = {
+    text: string;
+    onPress: () => void;
+    closeModal?: () => void;
+    testID?: string;
+};
 
-  return (
-    <View>
-      <TouchableOpacity onPress={() => setVisible(true)}>
-        {trigger}
-      </TouchableOpacity>
-      
-      <Modal
-        transparent
-        visible={visible}
-        onRequestClose={handleClose}
-        animationType="fade"
-      >
-        <TouchableOpacity 
-          style={styles.overlay} 
-          activeOpacity={1} 
-          onPress={handleClose}
-        >
-          <View style={styles.menu}>
-            {React.Children.map(children, (child) => 
-              React.cloneElement(child as React.ReactElement, {
-                onPress: () => {
-                  (child as any).props.onPress();
-                  handleClose();
-                }
-              } as any)
+const Menu = ({ trigger, children }: MenuProps) => {
+    const [modalVisible, setModalVisible] = useState(false);
+    const [triggerDimensions, setTriggerDimensions] = useState<LayoutRectangle>({ x: 0, y: 0, width: 0, height: 0 });
+    const [modalDimensions, setModalDimensions] = useState<LayoutRectangle>({ x: 0, y: 0, width: 0, height: 0 });
+    const triggerWrapperRef = useRef<View>(null);
+    const itemsWrapperRef = useRef<View>(null);
+    const { keyboardHeight } = useKeyboardHeight();
+
+    const opacity = useRef(new Animated.Value(0)).current;
+    const scale = useRef(new Animated.Value(0.9)).current;
+
+    useEffect(() => {
+        if (modalVisible) {
+            calculateDimensions();
+        } else {
+            resetAnimation();
+        }
+    }, [modalVisible]);
+
+    useEffect(() => {
+        if (modalDimensions.width && triggerDimensions.x) {
+            startAnimation();
+        }
+    }, [modalDimensions, triggerDimensions]);
+
+    const styles = StyleSheet.create({
+        modalWrapper: {
+            ...StyleSheet.absoluteFillObject,
+            zIndex: 10,
+            backgroundColor: "transparent", // Eliminar el fondo del modal
+        },
+        activeSection: {
+            backgroundColor: "#1F2940",
+            alignSelf: "flex-start",
+            borderRadius: 10,
+            padding: 10,
+            zIndex: 99,
+            opacity: modalDimensions.width !== 0 && triggerDimensions.x !== 0 ? 1 : 0,
+        },
+        option: {
+            padding: 10,
+        },
+        optionText: {
+            color: "#FFFFFF",
+            fontSize: 16,
+        },
+    });
+
+    const closeModal = () => {
+        setModalVisible(false);
+    };
+
+    const calculateDimensions = () => {
+        triggerWrapperRef?.current?.measureInWindow((x, y, width, height) => {
+            setTriggerDimensions({
+                x,
+                y,
+                width,
+                height,
+            });
+        });
+
+        setTimeout(() => {
+            itemsWrapperRef?.current?.measureInWindow((x, y, width, height) => {
+                setModalDimensions({ x, y, width, height });
+            });
+        }, 0); // Reducir el tiempo de espera para calcular las dimensiones más rápido
+    };
+
+    const resetAnimation = () => {
+        opacity.setValue(0);
+        scale.setValue(0.9);
+    };
+
+    const startAnimation = () => {
+        Animated.parallel([
+            Animated.timing(opacity, {
+                toValue: 1,
+                duration: 100, // Reducir la duración de la animación
+                useNativeDriver: true,
+            }),
+            Animated.spring(scale, {
+                toValue: 1,
+                useNativeDriver: true,
+            }),
+        ]).start();
+    };
+
+    const { top, left } = useMemo(() => {
+        let left = 0;
+        let top = 0;
+
+        left = triggerDimensions.x - modalDimensions.width + triggerDimensions.width;
+        if (triggerDimensions.x - modalDimensions.width < 0)
+            left = triggerDimensions.x;
+
+        if (Platform.OS === "ios") {
+            const initialTriggerTop = triggerDimensions.y + triggerDimensions.height + 10;
+            if (modalDimensions.height + initialTriggerTop > layoutHeight - keyboardHeight)
+                top = triggerDimensions.y - modalDimensions.height - 10;
+            else top = initialTriggerTop;
+        } else {
+            const initialTriggerTop = triggerDimensions.y + triggerDimensions.height + (StatusBar.currentHeight || 0);
+            top = initialTriggerTop + modalDimensions.height > layoutHeight - keyboardHeight
+                ? initialTriggerTop - triggerDimensions.height - modalDimensions.height
+                : initialTriggerTop;
+        }
+
+        return { top: top - 20, left: left - 30 };
+    }, [modalDimensions, triggerDimensions, keyboardHeight]);
+
+    const menuPositionStyles = { left, top };
+
+    return (
+        <>
+            <Pressable
+                onPress={() => setModalVisible(true)}
+                ref={triggerWrapperRef}
+            >
+                {trigger}
+            </Pressable>
+            {modalVisible && (
+                <Portal>
+                    <TouchableOpacity
+                        activeOpacity={1}
+                        onPress={closeModal}
+                        style={styles.modalWrapper}
+                        testID="outside-area"
+                    >
+                        <Animated.View
+                            ref={itemsWrapperRef}
+                            style={[styles.activeSection, menuPositionStyles, { opacity, transform: [{ scale }] }]}
+                            collapsable={false}
+                        >
+                            {Array.isArray(children)
+                                ? children.map((childrenItem, index) => {
+                                    if (React.isValidElement(childrenItem)) {
+                                        return React.cloneElement(childrenItem, {
+                                            key: index,
+                                            ...(childrenItem.type === MenuItem && { closeModal }),
+                                        });
+                                    }
+                                    return childrenItem;
+                                })
+                                : React.isValidElement(children)
+                                    ? React.cloneElement(children, {
+                                        ...(children.type === MenuItem && { closeModal }),
+                                    })
+                                    : children}
+                        </Animated.View>
+                    </TouchableOpacity>
+                </Portal>
             )}
-          </View>
-        </TouchableOpacity>
-      </Modal>
-    </View>
-  );
+        </>
+    );
 };
 
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  menu: {
-    backgroundColor: '#1F2940',
-    borderRadius: 8,
-    padding: 8,
-    minWidth: 150,
-  },
-  menuItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
-  menuItemText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-  },
-});
+export const MenuItem = ({ text, onPress, closeModal, testID }: MenuItemProps) => {
+    const styles = StyleSheet.create({
+        body: {
+            padding: 10,
+        },
+        optionText: {
+            color: "#FFFFFF",
+            fontSize: 16,
+        },
+    });
+
+    const handleOnPress = () => {
+        onPress();
+        closeModal?.();
+    };
+
+    return (
+        <Pressable onPress={handleOnPress} style={styles.body} testID={testID}>
+            <Text style={styles.optionText} numberOfLines={1}>{text}</Text>
+        </Pressable >
+    );
+};
 
 export default Menu;

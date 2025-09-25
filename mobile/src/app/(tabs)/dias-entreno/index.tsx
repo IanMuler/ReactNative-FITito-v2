@@ -1,9 +1,9 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Modal, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import RadialGradientBackground from '@/components/RadialGradientBackground';
 import LinearGradientItem from '@/components/LinearGradientItem';
 import Menu, { MenuItem } from '@/components/Menu';
+import RadialGradientBackground from '@/components/ui/RadialGradientBackground';
 import {
   useTrainingDayList,
   useTrainingDayActions,
@@ -52,7 +52,7 @@ const TrainingDaysPage: React.FC = () => {
       <Text style={trainingDayListStyles.emptyText}>
         No tienes días de entreno creados
       </Text>
-      <TouchableOpacity 
+      <TouchableOpacity
         style={trainingDayListStyles.emptyButton}
         onPress={navigateToAddTrainingDay}
         testID="empty-state-add-button"
@@ -65,7 +65,7 @@ const TrainingDaysPage: React.FC = () => {
   );
 
   const trainingDayItems = (
-    <ScrollView 
+    <ScrollView
       contentContainerStyle={trainingDayListStyles.scrollViewContent}
       refreshControl={
         <RefreshControl
@@ -78,15 +78,15 @@ const TrainingDaysPage: React.FC = () => {
       {trainingDays.map((trainingDay, index) => (
         <LinearGradientItem
           key={trainingDay.id}
-          styles={{ 
-            dayContainer: { 
-              ...trainingDayListStyles.trainingDayContainer, 
-              zIndex: -index 
-            } 
+          styles={{
+            dayContainer: {
+              ...trainingDayListStyles.trainingDayContainer,
+              zIndex: -index
+            }
           }}
         >
-          <View 
-            style={trainingDayListStyles.trainingDayContent} 
+          <View
+            style={trainingDayListStyles.trainingDayContent}
             testID={`training-day-${trainingDay.name}`}
           >
             <Text style={trainingDayListStyles.trainingDayText}>
@@ -102,11 +102,11 @@ const TrainingDaysPage: React.FC = () => {
                 />
               }>
                 {generateMenuOptions(trainingDay).map((option, optionIndex) => (
-                  <MenuItem 
-                    key={optionIndex} 
-                    text={option.label} 
-                    onPress={option.onPress} 
-                    testID={option.testID} 
+                  <MenuItem
+                    key={optionIndex}
+                    text={option.label}
+                    onPress={option.onPress}
+                    testID={option.testID}
                   />
                 ))}
               </Menu>
@@ -172,7 +172,7 @@ const TrainingDaysPage: React.FC = () => {
     <View style={trainingDayListStyles.container}>
       <RadialGradientBackground />
       {headerSection}
-      
+
       {isLoading ? loadingState : (
         trainingDays.length === 0 ? emptyState : (
           <>

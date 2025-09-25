@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, TextInput, TouchableOpacity, Image, ScrollView } from 'react-native';
-import RadialGradientBackground from '@/components/RadialGradientBackground';
 import { useExerciseForm, useImagePicker } from '@/features/exercises/hooks';
 import { addExerciseStyles } from '@/features/exercises/styles';
+import RadialGradientBackground from '@/components/ui/RadialGradientBackground';
 
 const AddExercisePage: React.FC = () => {
   /* Business Logic Hooks */

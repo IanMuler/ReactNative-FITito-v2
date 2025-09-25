@@ -51,6 +51,7 @@ export const ProfileProvider: React.FC<ProfileProviderProps> = ({ children }) =>
     currentProfile,
     profiles,
     isLoading,
+    profileId: currentProfile?.id || 1, // Default to 1 if no profile
     switchProfile,
     refreshProfiles,
   };

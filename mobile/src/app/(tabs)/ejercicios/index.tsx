@@ -1,9 +1,9 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Image, Modal, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import RadialGradientBackground from '@/components/RadialGradientBackground';
 import LinearGradientItem from '@/components/LinearGradientItem';
 import Menu, { MenuItem } from '@/components/Menu';
+import RadialGradientBackground from '@/components/ui/RadialGradientBackground';
 import {
   useExerciseList,
   useExerciseActions,

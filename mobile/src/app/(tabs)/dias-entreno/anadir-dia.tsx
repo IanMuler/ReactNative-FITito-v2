@@ -8,10 +8,9 @@ import {
   ScrollView,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import RadialGradientBackground from '@/components/RadialGradientBackground';
 import { useExerciseList } from '@/features/exercises/hooks';
 import { Exercise } from '@/features/exercises/types';
-import { 
+import {
   useTrainingDayActions,
   trainingDayApi,
   addTrainingDayStyles,
@@ -19,6 +18,7 @@ import {
   UpdateTrainingDayDto
 } from '@/features/training-days';
 import { useProfile } from '@/features/profile';
+import RadialGradientBackground from '@/components/ui/RadialGradientBackground';
 import Toast from 'react-native-toast-message';
 
 const AddTrainingDayPage: React.FC = () => {
@@ -46,14 +46,14 @@ const AddTrainingDayPage: React.FC = () => {
         try {
           const trainingDay = await trainingDayApi.getById(parseInt(id), currentProfile.id);
           setDayName(trainingDay.name);
-          
+
           // Convert training day exercises to selected exercises format
           const exercisesForSelection = trainingDay.exercises.map(tde => ({
             id: tde.exercise.id,
             name: tde.exercise.name,
             image: tde.exercise.image,
           })) as Exercise[];
-          
+
           setSelectedExercises(exercisesForSelection);
         } catch (error) {
           Toast.show({
@@ -112,7 +112,7 @@ const AddTrainingDayPage: React.FC = () => {
 
   /* Computed values */
   const isButtonDisabled = !dayName.trim() || selectedExercises.length === 0 || isLoading;
-  const isExerciseSelected = (exercise: Exercise) => 
+  const isExerciseSelected = (exercise: Exercise) =>
     selectedExercises.some((ex) => ex.id === exercise.id);
 
   /* Subcomponents */
@@ -150,7 +150,7 @@ const AddTrainingDayPage: React.FC = () => {
         No hay ejercicios disponibles.{'\n'}
         Crea algunos ejercicios primero.
       </Text>
-      <TouchableOpacity 
+      <TouchableOpacity
         style={addTrainingDayStyles.exercisesEmptyButton}
         onPress={() => router.push('/ejercicios/anadir-ejercicio')}
       >
@@ -180,8 +180,8 @@ const AddTrainingDayPage: React.FC = () => {
               source={{ uri: exercise.image }}
               style={addTrainingDayStyles.exerciseImage}
             />
-            <Text 
-              testID={`exercise-${exercise.name}-text`} 
+            <Text
+              testID={`exercise-${exercise.name}-text`}
               style={addTrainingDayStyles.exerciseText}
             >
               {exercise.name}
@@ -228,7 +228,7 @@ const AddTrainingDayPage: React.FC = () => {
       <ScrollView>
         {titleSection}
         {nameInputSection}
-        
+
         {exercisesLoading ? exercisesLoadingSection : (
           exercises.length === 0 ? exercisesEmptySection : exercisesSection
         )}

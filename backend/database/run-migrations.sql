@@ -19,6 +19,12 @@
 \echo 'Running migration 005: Training Days...'
 \i migrations/005-create-training-days.sql
 
+\echo 'Running migration 006: Routine Weeks...'
+\i migrations/006-create-routine-weeks.sql
+
+\echo 'Running migration 007: Workout Sessions...'
+\i migrations/007-create-workout-sessions.sql
+
 -- Run seeds
 \echo 'Running seed 001: Exercises...'
 \i seeds/001-exercises-seed.sql
