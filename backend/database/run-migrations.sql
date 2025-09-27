@@ -25,6 +25,9 @@
 \echo 'Running migration 007: Workout Sessions...'
 \i migrations/007-create-workout-sessions.sql
 
+\echo 'Running migration 008: Routine Day Configurations...'
+\i migrations/008-create-routine-day-configurations.sql
+
 -- Run seeds
 \echo 'Running seed 001: Exercises...'
 \i seeds/001-exercises-seed.sql

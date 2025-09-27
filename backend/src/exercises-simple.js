@@ -1054,6 +1054,71 @@ app.delete('/api/v1/routines/:id', async (req, res) => {
 // ROUTINE WEEKS ENDPOINTS
 // ==========================================
 
+// Initialize routine weeks (create weekly schedule) for a profile
+app.post('/api/v1/routine-weeks/initialize', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    const { profile_id } = req.body;
+    
+    if (!profile_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'profile_id is required'
+      });
+    }
+    
+    await client.query('BEGIN');
+    
+    // Check if routine weeks already exist for this profile
+    const existingWeeks = await client.query(`
+      SELECT COUNT(*) as count FROM routine_weeks WHERE profile_id = $1
+    `, [profile_id]);
+    
+    if (parseInt(existingWeeks.rows[0].count) > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        success: false,
+        error: 'Routine weeks already initialized for this profile'
+      });
+    }
+    
+    // Create routine weeks for all 7 days
+    const dayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+    const routineWeeks = [];
+    
+    for (let i = 0; i < dayNames.length; i++) {
+      const result = await client.query(`
+        INSERT INTO routine_weeks (profile_id, day_of_week, day_name, is_rest_day, routine_id, completed_date)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id, profile_id, day_of_week, day_name, is_rest_day, routine_id, completed_date, created_at, updated_at
+      `, [profile_id, i + 1, dayNames[i], false, null, null]);
+      
+      routineWeeks.push(result.rows[0]);
+    }
+    
+    await client.query('COMMIT');
+    
+    console.log(`📅 Initialized routine weeks for profile ${profile_id}`);
+    
+    res.status(201).json({
+      success: true,
+      data: routineWeeks,
+      message: 'Routine weeks initialized successfully'
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error initializing routine weeks:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message
+    });
+  } finally {
+    client.release();
+  }
+});
+
 // Get routine weeks (weekly schedule) for a profile
 app.get('/api/v1/routine-weeks', async (req, res) => {
   try {
@@ -1254,6 +1319,290 @@ app.put('/api/v1/routine-weeks/:id/complete', async (req, res) => {
     });
   } catch (error) {
     console.error('Error marking day as completed:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message
+    });
+  }
+});
+
+// ==========================================
+// ROUTINE DAY CONFIGURATIONS ENDPOINTS
+// ==========================================
+
+// Get routine day configuration for a specific routine week
+app.get('/api/v1/routine-weeks/:id/configuration', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { profile_id } = req.query;
+    
+    if (!profile_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'profile_id is required'
+      });
+    }
+    
+    // Verify routine week belongs to profile
+    const routineWeekCheck = await pool.query(`
+      SELECT rw.id, rw.day_name, rw.routine_id, r.name as routine_name
+      FROM routine_weeks rw
+      LEFT JOIN routines r ON rw.routine_id = r.id
+      WHERE rw.id = $1 AND rw.profile_id = $2
+    `, [id, profile_id]);
+    
+    if (routineWeekCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Routine week not found or does not belong to this profile'
+      });
+    }
+    
+    // Get configuration using stored function
+    const result = await pool.query(`
+      SELECT * FROM get_routine_day_configuration($1)
+    `, [id]);
+    
+    const routineWeek = routineWeekCheck.rows[0];
+    
+    console.log(`📋 Retrieved configuration for routine week ${id}: ${result.rows.length} exercises`);
+    
+    res.json({
+      success: true,
+      data: {
+        routine_week: routineWeek,
+        exercises: result.rows
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching routine day configuration:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message
+    });
+  }
+});
+
+// Initialize routine day configuration from training day
+app.post('/api/v1/routine-weeks/:id/configuration/initialize', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    const { id } = req.params;
+    const { profile_id, training_day_id } = req.body;
+    
+    if (!profile_id || !training_day_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'profile_id and training_day_id are required'
+      });
+    }
+    
+    await client.query('BEGIN');
+    
+    // Verify routine week belongs to profile
+    const routineWeekCheck = await client.query(`
+      SELECT id FROM routine_weeks 
+      WHERE id = $1 AND profile_id = $2
+    `, [id, profile_id]);
+    
+    if (routineWeekCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({
+        success: false,
+        error: 'Routine week not found or does not belong to this profile'
+      });
+    }
+    
+    // Verify training day belongs to profile
+    const trainingDayCheck = await client.query(`
+      SELECT id FROM training_days 
+      WHERE id = $1 AND profile_id = $2 AND is_active = true
+    `, [training_day_id, profile_id]);
+    
+    if (trainingDayCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({
+        success: false,
+        error: 'Training day not found or does not belong to this profile'
+      });
+    }
+    
+    // Initialize configuration using stored function
+    await client.query(`
+      SELECT initialize_routine_day_configuration($1, $2)
+    `, [id, training_day_id]);
+    
+    await client.query('COMMIT');
+    
+    // Get the created configuration
+    const result = await pool.query(`
+      SELECT * FROM get_routine_day_configuration($1)
+    `, [id]);
+    
+    console.log(`🔧 Initialized configuration for routine week ${id} from training day ${training_day_id}`);
+    
+    res.status(201).json({
+      success: true,
+      data: result.rows,
+      message: 'Routine day configuration initialized successfully'
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error initializing routine day configuration:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// Update routine day configuration
+app.put('/api/v1/routine-weeks/:id/configuration', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    const { id } = req.params;
+    const { profile_id, exercises } = req.body;
+    
+    if (!profile_id || !exercises || !Array.isArray(exercises)) {
+      return res.status(400).json({
+        success: false,
+        error: 'profile_id and exercises array are required'
+      });
+    }
+    
+    await client.query('BEGIN');
+    
+    // Verify routine week belongs to profile
+    const routineWeekCheck = await client.query(`
+      SELECT id FROM routine_weeks 
+      WHERE id = $1 AND profile_id = $2
+    `, [id, profile_id]);
+    
+    if (routineWeekCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({
+        success: false,
+        error: 'Routine week not found or does not belong to this profile'
+      });
+    }
+    
+    // Clear existing configurations
+    await client.query(`
+      DELETE FROM routine_day_configurations WHERE routine_week_id = $1
+    `, [id]);
+    
+    // Insert new configurations
+    for (let i = 0; i < exercises.length; i++) {
+      const exercise = exercises[i];
+      
+      // Validate exercise exists
+      const exerciseCheck = await client.query(`
+        SELECT id, name, image FROM exercises WHERE id = $1
+      `, [exercise.exercise_id]);
+      
+      if (exerciseCheck.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          success: false,
+          error: `Exercise with ID ${exercise.exercise_id} not found`
+        });
+      }
+      
+      const exerciseData = exerciseCheck.rows[0];
+      
+      await client.query(`
+        INSERT INTO routine_day_configurations (
+          routine_week_id, training_day_id, exercise_id, exercise_name, 
+          exercise_image, order_index, sets_config, notes
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `, [
+        id,
+        exercise.training_day_id || null,
+        exercise.exercise_id,
+        exerciseData.name,
+        exerciseData.image,
+        i,
+        JSON.stringify(exercise.sets_config || []),
+        exercise.notes || null
+      ]);
+    }
+    
+    await client.query('COMMIT');
+    
+    // Get updated configuration
+    const result = await pool.query(`
+      SELECT * FROM get_routine_day_configuration($1)
+    `, [id]);
+    
+    console.log(`💾 Updated configuration for routine week ${id} with ${exercises.length} exercises`);
+    
+    res.json({
+      success: true,
+      data: result.rows,
+      message: 'Routine day configuration updated successfully'
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error updating routine day configuration:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// Delete routine day configuration
+app.delete('/api/v1/routine-weeks/:id/configuration', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { profile_id } = req.query;
+    
+    if (!profile_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'profile_id is required'
+      });
+    }
+    
+    // Verify routine week belongs to profile
+    const routineWeekCheck = await pool.query(`
+      SELECT id FROM routine_weeks 
+      WHERE id = $1 AND profile_id = $2
+    `, [id, profile_id]);
+    
+    if (routineWeekCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Routine week not found or does not belong to this profile'
+      });
+    }
+    
+    // Delete configurations
+    const result = await pool.query(`
+      DELETE FROM routine_day_configurations 
+      WHERE routine_week_id = $1
+      RETURNING id
+    `, [id]);
+    
+    console.log(`🗑️ Deleted ${result.rows.length} configurations for routine week ${id}`);
+    
+    res.json({
+      success: true,
+      message: 'Routine day configuration deleted successfully',
+      deleted_count: result.rows.length
+    });
+  } catch (error) {
+    console.error('Error deleting routine day configuration:', error.message);
     res.status(500).json({
       success: false,
       error: 'Internal server error',
