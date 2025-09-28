@@ -1,4 +1,5 @@
 // Global services will be exported here
-// Example:
-// export { apiClient } from './apiClient';
+export { fetchHandler } from './fetchHandler';
+
+// Future exports:
 // export { storageService } from './storage';

@@ -2,8 +2,7 @@ import {
   RoutineDayConfiguration,
   ExerciseConfiguration,
   CreateRoutineConfigurationDto,
-  UpdateRoutineConfigurationDto,
-  InitializeRoutineConfigurationDto
+  UpdateRoutineConfigurationDto
 } from '../types/routineConfiguration';
 
 const API_BASE_URL = 'http://192.168.1.50:3000/api/v1';
@@ -27,27 +26,6 @@ export const routineConfigurationApi = {
     return result.data;
   },
 
-  // Initialize configuration from training day
-  initializeConfiguration: async (
-    routineWeekId: number, 
-    data: InitializeRoutineConfigurationDto
-  ): Promise<ExerciseConfiguration[]> => {
-    const response = await fetch(
-      `${API_BASE_URL}/routine-weeks/${routineWeekId}/configuration/initialize`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      }
-    );
-    if (!response.ok) {
-      throw new Error('Failed to initialize routine configuration');
-    }
-    const result: ApiResponse<ExerciseConfiguration[]> = await response.json();
-    return result.data;
-  },
 
   // Update configuration
   updateConfiguration: async (

@@ -40,7 +40,7 @@ export interface Day {
   completedDate?: string; // Format: YYYY-MM-DD
 }
 
-// Routine week configuration (matches backend schema)
+// Routine week configuration (matches backend unified schema)
 export interface RoutineWeek {
   id: number;
   profile_id: number;
@@ -48,9 +48,23 @@ export interface RoutineWeek {
   day_name: string; // Spanish day names
   is_rest_day: boolean;
   routine_id?: number;
+  routine_name?: string; // Name of the routine assigned to this day
+  training_day_id?: number; // Optional reference to training day template
+  exercises_config: ExerciseConfig[]; // Unified exercises configuration
   completed_date?: string;
+  has_configuration: boolean; // Whether this day has exercises configured
   created_at: string;
   updated_at: string;
+}
+
+// Exercise configuration in unified structure
+export interface ExerciseConfig {
+  exercise_id: number;
+  exercise_name: string;
+  exercise_image?: string;
+  order_index: number;
+  sets_config: SetDetail[];
+  notes?: string;
 }
 
 // Workout session (matches backend schema)
@@ -150,8 +164,8 @@ export interface HistoryEntry {
 
 // Constants
 export const DAY_NAMES = [
-  'Domingo', 'Lunes', 'Martes', 'Miércoles', 
-  'Jueves', 'Viernes', 'Sábado'
+  'Lunes', 'Martes', 'Miércoles', 'Jueves', 
+  'Viernes', 'Sábado', 'Domingo'
 ] as const;
 
 export const MONTH_NAMES = [

@@ -314,6 +314,7 @@ app.post('/api/v1/training-days', async (req, res) => {
   try {
     const { profile_id, name, description, exercises = [] } = req.body;
     
+    
     if (!profile_id || !name) {
       return res.status(400).json({
         success: false,
@@ -1139,15 +1140,17 @@ app.get('/api/v1/routine-weeks', async (req, res) => {
         rw.day_name,
         rw.is_rest_day,
         rw.routine_id,
+        rw.routine_name,
+        rw.training_day_id,
+        rw.exercises_config,
         rw.completed_date,
-        r.name as routine_name,
-        r.color as routine_color,
-        r.difficulty_level,
-        r.duration_minutes,
         rw.created_at,
-        rw.updated_at
+        rw.updated_at,
+        CASE 
+          WHEN jsonb_array_length(rw.exercises_config) > 0 THEN true 
+          ELSE false 
+        END as has_configuration
       FROM routine_weeks rw
-      LEFT JOIN routines r ON rw.routine_id = r.id AND r.is_active = true
       WHERE rw.profile_id = $1
       ORDER BY rw.day_of_week
     `, [profile_id]);
@@ -1174,7 +1177,16 @@ app.put('/api/v1/routine-weeks/:id', async (req, res) => {
   
   try {
     const { id } = req.params;
-    const { profile_id, routine_id, is_rest_day } = req.body;
+    const { profile_id, routine_id, is_rest_day, completed_date } = req.body;
+    
+    console.log('🎯 [API] Update routine week request:', {
+      routineWeekId: id,
+      requestBody: req.body,
+      profile_id,
+      routine_id,
+      is_rest_day,
+      completed_date,
+    });
     
     if (!profile_id) {
       return res.status(400).json({
@@ -1201,14 +1213,45 @@ app.put('/api/v1/routine-weeks/:id', async (req, res) => {
       }
     }
     
-    // Update routine week
+    // Update routine week (preserve routine_name, training_day_id, exercises_config if they exist)
+    const updateFields = [];
+    const updateValues = [];
+    let paramCount = 1;
+    
+    if (routine_id !== undefined) {
+      updateFields.push(`routine_id = $${paramCount}`);
+      updateValues.push(routine_id);
+      paramCount++;
+    }
+    
+    if (is_rest_day !== undefined) {
+      updateFields.push(`is_rest_day = $${paramCount}`);
+      updateValues.push(is_rest_day);
+      paramCount++;
+    }
+    
+    if (completed_date !== undefined) {
+      updateFields.push(`completed_date = $${paramCount}`);
+      updateValues.push(completed_date);
+      paramCount++;
+      console.log('📅 [API] Setting completed_date to:', completed_date);
+    }
+    
+    if (updateFields.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        error: 'No fields to update'
+      });
+    }
+    
+    updateFields.push('updated_at = CURRENT_TIMESTAMP');
+    updateValues.push(id, profile_id);
+    
     const result = await client.query(`
       UPDATE routine_weeks 
-      SET 
-        routine_id = $1,
-        is_rest_day = $2,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = $3 AND profile_id = $4
+      SET ${updateFields.join(', ')}
+      WHERE id = $${paramCount} AND profile_id = $${paramCount + 1}
       RETURNING 
         id,
         profile_id,
@@ -1216,9 +1259,19 @@ app.put('/api/v1/routine-weeks/:id', async (req, res) => {
         day_name,
         is_rest_day,
         routine_id,
+        routine_name,
+        training_day_id,
+        exercises_config,
         completed_date,
         updated_at
-    `, [routine_id, is_rest_day || false, id, profile_id]);
+    `, updateValues);
+    
+    console.log('🔄 [API] Update query executed:', {
+      updateFields: updateFields.join(', '),
+      updateValues,
+      rowsAffected: result.rowCount,
+      returnedData: result.rows[0],
+    });
     
     if (result.rows.length === 0) {
       await client.query('ROLLBACK');
@@ -1277,6 +1330,13 @@ app.put('/api/v1/routine-weeks/:id/complete', async (req, res) => {
     const { id } = req.params;
     const { profile_id, completed_date } = req.body;
     
+    console.log('🎯 [API] Mark day as completed request:', {
+      routineWeekId: id,
+      requestBody: req.body,
+      profile_id,
+      completed_date,
+    });
+    
     if (!profile_id) {
       return res.status(400).json({
         success: false,
@@ -1285,6 +1345,16 @@ app.put('/api/v1/routine-weeks/:id/complete', async (req, res) => {
     }
     
     const dateToSet = completed_date || new Date().toISOString().split('T')[0];
+    console.log('📅 [API] Date to set:', dateToSet);
+    
+    // Check current state before update
+    const beforeUpdate = await pool.query(`
+      SELECT id, day_name, completed_date 
+      FROM routine_weeks 
+      WHERE id = $1 AND profile_id = $2
+    `, [id, profile_id]);
+    
+    console.log('🔍 [API] Before update:', beforeUpdate.rows[0]);
     
     const result = await pool.query(`
       UPDATE routine_weeks 
@@ -1303,14 +1373,20 @@ app.put('/api/v1/routine-weeks/:id/complete', async (req, res) => {
         updated_at
     `, [dateToSet, id, profile_id]);
     
+    console.log('🔄 [API] Update result:', {
+      rowsAffected: result.rowCount,
+      returnedData: result.rows[0],
+    });
+    
     if (result.rows.length === 0) {
+      console.error('❌ [API] No rows found to update');
       return res.status(404).json({
         success: false,
         error: 'Routine week not found or does not belong to this profile'
       });
     }
     
-    console.log(`✅ Marked routine week ${id} as completed on ${dateToSet}`);
+    console.log(`✅ [API] Marked routine week ${id} as completed on ${dateToSet}`, result.rows[0]);
     
     res.json({
       success: true,
@@ -1344,35 +1420,42 @@ app.get('/api/v1/routine-weeks/:id/configuration', async (req, res) => {
       });
     }
     
-    // Verify routine week belongs to profile
-    const routineWeekCheck = await pool.query(`
-      SELECT rw.id, rw.day_name, rw.routine_id, r.name as routine_name
+    // Get routine week with unified configuration
+    const result = await pool.query(`
+      SELECT 
+        rw.id,
+        rw.day_name,
+        rw.routine_id,
+        rw.routine_name,
+        rw.exercises_config
       FROM routine_weeks rw
-      LEFT JOIN routines r ON rw.routine_id = r.id
       WHERE rw.id = $1 AND rw.profile_id = $2
     `, [id, profile_id]);
     
-    if (routineWeekCheck.rows.length === 0) {
+    if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
         error: 'Routine week not found or does not belong to this profile'
       });
     }
     
-    // Get configuration using stored function
-    const result = await pool.query(`
-      SELECT * FROM get_routine_day_configuration($1)
-    `, [id]);
+    const routineWeek = result.rows[0];
     
-    const routineWeek = routineWeekCheck.rows[0];
+    // Convert exercises_config JSONB to array format expected by frontend
+    const exercises = routineWeek.exercises_config || [];
     
-    console.log(`📋 Retrieved configuration for routine week ${id}: ${result.rows.length} exercises`);
+    console.log(`📋 Retrieved configuration for routine week ${id}: ${exercises.length} exercises`);
     
     res.json({
       success: true,
       data: {
-        routine_week: routineWeek,
-        exercises: result.rows
+        routine_week: {
+          id: routineWeek.id,
+          day_name: routineWeek.day_name,
+          routine_id: routineWeek.routine_id,
+          routine_name: routineWeek.routine_name
+        },
+        exercises: exercises
       }
     });
   } catch (error) {
@@ -1468,7 +1551,8 @@ app.put('/api/v1/routine-weeks/:id/configuration', async (req, res) => {
   
   try {
     const { id } = req.params;
-    const { profile_id, exercises } = req.body;
+    const { profile_id, exercises, routine_name } = req.body;
+    
     
     if (!profile_id || !exercises || !Array.isArray(exercises)) {
       return res.status(400).json({
@@ -1493,12 +1577,9 @@ app.put('/api/v1/routine-weeks/:id/configuration', async (req, res) => {
       });
     }
     
-    // Clear existing configurations
-    await client.query(`
-      DELETE FROM routine_day_configurations WHERE routine_week_id = $1
-    `, [id]);
+    // Build exercises config array with validation
+    const exercisesConfig = [];
     
-    // Insert new configurations
     for (let i = 0; i < exercises.length; i++) {
       const exercise = exercises[i];
       
@@ -1517,35 +1598,63 @@ app.put('/api/v1/routine-weeks/:id/configuration', async (req, res) => {
       
       const exerciseData = exerciseCheck.rows[0];
       
-      await client.query(`
-        INSERT INTO routine_day_configurations (
-          routine_week_id, training_day_id, exercise_id, exercise_name, 
-          exercise_image, order_index, sets_config, notes
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      `, [
-        id,
-        exercise.training_day_id || null,
-        exercise.exercise_id,
-        exerciseData.name,
-        exerciseData.image,
-        i,
-        JSON.stringify(exercise.sets_config || []),
-        exercise.notes || null
-      ]);
+      exercisesConfig.push({
+        exercise_id: exercise.exercise_id,
+        exercise_name: exerciseData.name,
+        exercise_image: exerciseData.image,
+        order_index: i,
+        sets_config: exercise.sets_config || [],
+        notes: exercise.notes || ''
+      });
     }
+    
+    // Determine routine name: use provided name, or query from training_day_id, or default
+    let finalRoutineName = null;
+    const trainingDayId = exercises.length > 0 ? exercises[0].training_day_id || null : null;
+    
+    
+    if (exercises.length > 0) {
+      if (routine_name) {
+        // Use provided routine name
+        finalRoutineName = routine_name;
+      } else if (trainingDayId) {
+        // Query training day name from database
+        const trainingDayResult = await client.query(
+          'SELECT name FROM training_days WHERE id = $1', 
+          [trainingDayId]
+        );
+        finalRoutineName = trainingDayResult.rows.length > 0 
+          ? trainingDayResult.rows[0].name 
+          : 'Entreno configurado';
+      } else {
+        // Fallback to default
+        finalRoutineName = 'Entreno configurado';
+      }
+    }
+    
+    // Update routine week with unified configuration
+    await client.query(`
+      UPDATE routine_weeks 
+      SET 
+        routine_name = $5,
+        training_day_id = $4,
+        exercises_config = $3
+      WHERE id = $1 AND profile_id = $2
+    `, [
+      id, 
+      profile_id, 
+      JSON.stringify(exercisesConfig),
+      trainingDayId,
+      finalRoutineName
+    ]);
     
     await client.query('COMMIT');
     
-    // Get updated configuration
-    const result = await pool.query(`
-      SELECT * FROM get_routine_day_configuration($1)
-    `, [id]);
-    
-    console.log(`💾 Updated configuration for routine week ${id} with ${exercises.length} exercises`);
+    console.log(`💾 Updated unified configuration for routine week ${id} with ${exercises.length} exercises`);
     
     res.json({
       success: true,
-      data: result.rows,
+      data: exercisesConfig,
       message: 'Routine day configuration updated successfully'
     });
   } catch (error) {
@@ -1587,12 +1696,16 @@ app.delete('/api/v1/routine-weeks/:id/configuration', async (req, res) => {
       });
     }
     
-    // Delete configurations
+    // Clear configuration from unified structure
     const result = await pool.query(`
-      DELETE FROM routine_day_configurations 
-      WHERE routine_week_id = $1
+      UPDATE routine_weeks 
+      SET 
+        routine_name = NULL,
+        training_day_id = NULL,
+        exercises_config = '[]'
+      WHERE id = $1 AND profile_id = $2
       RETURNING id
-    `, [id]);
+    `, [id, profile_id]);
     
     console.log(`🗑️ Deleted ${result.rows.length} configurations for routine week ${id}`);
     
@@ -1668,6 +1781,319 @@ app.get('/api/v1/workout-sessions', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching workout sessions:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message
+    });
+  }
+});
+
+// Get workout session by date (must be before /:id route)
+app.get('/api/v1/workout-sessions/by-date', async (req, res) => {
+  try {
+    const { profile_id, date } = req.query;
+    
+    if (!profile_id || !date) {
+      return res.status(400).json({
+        success: false,
+        error: 'profile_id and date are required'
+      });
+    }
+    
+    console.log(`📅 Getting workout session for profile ${profile_id} on ${date}`);
+    
+    // Parse date and create date range for the full day
+    const targetDate = new Date(date);
+    const startOfDay = new Date(targetDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(targetDate);
+    endOfDay.setHours(23, 59, 59, 999);
+    
+    const result = await pool.query(`
+      SELECT 
+        ws.id,
+        ws.profile_id,
+        ws.routine_id,
+        ws.name as routine_name,
+        ws.started_at,
+        ws.completed_at,
+        ws.duration_minutes,
+        ws.total_weight_lifted,
+        ws.total_sets,
+        ws.total_reps,
+        ws.average_rpe,
+        ws.notes,
+        ws.is_completed,
+        ws.workout_type,
+        ws.location,
+        ws.mood_before,
+        ws.mood_after,
+        ws.energy_before,
+        ws.energy_after,
+        ws.created_at,
+        ws.updated_at,
+        COUNT(wse.id) as exercises_count
+      FROM workout_sessions ws
+      LEFT JOIN workout_session_exercises wse ON ws.id = wse.workout_session_id
+      WHERE ws.profile_id = $1 
+        AND ws.started_at >= $2 
+        AND ws.started_at <= $3
+        AND ws.is_completed = true
+      GROUP BY ws.id
+      ORDER BY ws.started_at DESC
+      LIMIT 1
+    `, [profile_id, startOfDay.toISOString(), endOfDay.toISOString()]);
+    
+    if (result.rows.length === 0) {
+      return res.json({
+        success: true,
+        data: null,
+        message: 'No workout session found for this date'
+      });
+    }
+    
+    const session = result.rows[0];
+    
+    // Get exercises for this session
+    const exercisesResult = await pool.query(`
+      SELECT 
+        wse.id,
+        wse.exercise_id,
+        wse.exercise_name,
+        wse.exercise_image,
+        wse.order_in_session,
+        wse.is_completed,
+        wse.notes as exercise_notes,
+        e.name as exercise_full_name,
+        e.image as exercise_full_image
+      FROM workout_session_exercises wse
+      LEFT JOIN exercises e ON wse.exercise_id = e.id
+      WHERE wse.workout_session_id = $1
+      ORDER BY wse.order_in_session
+    `, [session.id]);
+    
+    // Get sets for each exercise
+    const setsResult = await pool.query(`
+      SELECT 
+        ws.id,
+        ws.workout_session_exercise_id,
+        ws.set_number,
+        ws.reps,
+        ws.weight,
+        ws.rir,
+        ws.rest_pause_reps,
+        ws.drop_set_weights,
+        ws.partial_reps,
+        ws.is_completed,
+        ws.notes,
+        ws.created_at
+      FROM workout_session_sets ws
+      WHERE ws.workout_session_exercise_id IN (
+        SELECT id FROM workout_session_exercises WHERE workout_session_id = $1
+      )
+      ORDER BY ws.workout_session_exercise_id, ws.set_number
+    `, [session.id]);
+    
+    // Group sets by exercise
+    const exercisesWithSets = exercisesResult.rows.map(exercise => ({
+      ...exercise,
+      sets: setsResult.rows.filter(set => set.workout_session_exercise_id === exercise.id)
+    }));
+    
+    const sessionData = {
+      ...session,
+      exercises: exercisesWithSets
+    };
+    
+    console.log(`✅ Found workout session for ${date}: ${session.routine_name}`);
+    
+    res.json({
+      success: true,
+      data: sessionData
+    });
+  } catch (error) {
+    console.error('Error getting workout session by date:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message
+    });
+  }
+});
+
+// Get workout history in AsyncStorage format for replacement compatibility
+// URL format: /api/v1/workout-history/:profileId/:date
+// Date format: DD/MM/YYYY (like original AsyncStorage)
+app.get('/api/v1/workout-history/:profileId/:date', async (req, res) => {
+  try {
+    const { profileId, date } = req.params;
+    
+    
+    // Handle both YYYY-MM-DD and DD/MM/YYYY date formats
+    let dbDateString;
+    if (date.includes('/')) {
+      // DD/MM/YYYY format
+      const [day, month, year] = date.split('/');
+      dbDateString = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    } else if (date.includes('-')) {
+      // YYYY-MM-DD format (already correct for database)
+      dbDateString = date;
+    } else {
+      throw new Error(`Invalid date format: ${date}. Expected DD/MM/YYYY or YYYY-MM-DD`);
+    }
+    
+    
+    // Query for workout session on the specific date (using migration 004 schema)
+    const sessionResult = await pool.query(`
+      SELECT 
+        ws.id,
+        ws.name,
+        ws.started_at,
+        ws.completed_at,
+        ws.duration_minutes,
+        TO_CHAR(ws.started_at, 'DD/MM/YYYY') as formatted_date
+      FROM workout_sessions ws
+      WHERE ws.profile_id = $1 
+        AND DATE(ws.started_at) = $2
+        AND ws.is_completed = true
+      ORDER BY ws.started_at DESC
+      LIMIT 1
+    `, [profileId, dbDateString]);
+    
+    if (sessionResult.rows.length === 0) {
+      console.log(`📭 [ASYNC-STORAGE] No workout session found for ${date}`);
+      return res.json({
+        success: true,
+        data: [] // Return empty array, matching AsyncStorage format when no history
+      });
+    }
+    
+    const session = sessionResult.rows[0];
+    console.log(`📋 [ASYNC-STORAGE] Found session: ${session.name}`);
+    
+    // Get performed data from workout session sets (migration 007 schema)
+    const workoutSetsResult = await pool.query(`
+      SELECT 
+        wse.exercise_id,
+        e.name as exercise_name,
+        e.image as exercise_image,
+        wss.set_number,
+        wss.reps as performed_reps,
+        wss.weight as performed_weight,
+        wss.rir as performed_rir,
+        wss.is_completed,
+        wss.notes
+      FROM workout_session_exercises wse
+      JOIN workout_session_sets wss ON wse.id = wss.workout_session_exercise_id
+      JOIN exercises e ON wse.exercise_id = e.id
+      WHERE wse.workout_session_id = $1
+      ORDER BY wse.exercise_id, wss.set_number
+    `, [session.id]);
+    
+    // Get planned data from routine_weeks.exercises_config (JSONB)
+    // This contains the original routine configuration that was planned
+    // Calculate day of week from workout session's completed_at timestamp
+    const plannedDataResult = await pool.query(`
+      SELECT 
+        rw.exercises_config
+      FROM workout_sessions ws
+      LEFT JOIN routine_weeks rw ON rw.profile_id = ws.profile_id 
+        AND rw.day_of_week = EXTRACT(DOW FROM COALESCE(ws.completed_at, ws.started_at))
+      WHERE ws.id = $1
+      AND rw.exercises_config IS NOT NULL 
+      AND rw.exercises_config != '[]'
+      ORDER BY rw.completed_date DESC
+      LIMIT 1
+    `, [session.id]);
+    
+    const performedData = workoutSetsResult.rows;
+    
+    console.log(`🔍 [ASYNC-STORAGE] Found data:`, {
+      plannedConfigResults: plannedDataResult.rows.length,
+      performedSets: performedData.length
+    });
+    
+    // Transform to AsyncStorage format with both planned and performed data
+    let exerciseGroups = {};
+    
+    // Process planned data from routine_weeks.exercises_config JSONB
+    if (plannedDataResult.rows.length > 0) {
+      const exercisesConfig = plannedDataResult.rows[0].exercises_config;
+      console.log(`🔍 [PLANNED] Raw exercises_config:`, JSON.stringify(exercisesConfig, null, 2));
+      
+      if (Array.isArray(exercisesConfig)) {
+        exercisesConfig.forEach(exerciseConfig => {
+          const exerciseKey = `${exerciseConfig.exercise_id}-${exerciseConfig.exercise_name}`;
+          
+          if (!exerciseGroups[exerciseKey]) {
+            exerciseGroups[exerciseKey] = {
+              name: exerciseConfig.exercise_name,
+              image: exerciseConfig.exercise_image || '',
+              sets: [],
+              performedSets: []
+            };
+          }
+          
+          // Process JSONB sets_config data from routine configuration
+          if (exerciseConfig.sets_config && Array.isArray(exerciseConfig.sets_config)) {
+            exerciseGroups[exerciseKey].sets = exerciseConfig.sets_config.map(setConfig => ({
+              reps: String(setConfig.reps || ''),
+              weight: String(setConfig.weight || ''),
+              rir: setConfig.rir ? String(setConfig.rir) : undefined
+            }));
+            console.log(`✅ [PLANNED] Processed ${exerciseGroups[exerciseKey].sets.length} planned sets for ${exerciseConfig.exercise_name}`);
+          }
+        });
+      }
+    }
+    
+    // Process performed sets from workout_session_sets
+    performedData.forEach(setData => {
+      const exerciseKey = `${setData.exercise_id}-${setData.exercise_name}`;
+      
+      if (!exerciseGroups[exerciseKey]) {
+        exerciseGroups[exerciseKey] = {
+          name: setData.exercise_name,
+          image: setData.exercise_image || '',
+          sets: [], // Will be populated by planned data if available
+          performedSets: []
+        };
+      }
+      
+      // Add performed set
+      exerciseGroups[exerciseKey].performedSets.push({
+        reps: String(setData.performed_reps || ''),
+        weight: String(setData.performed_weight || ''),
+        rir: setData.performed_rir ? String(setData.performed_rir) : undefined,
+        isCompleted: setData.is_completed || false,
+        notes: setData.notes || ''
+      });
+    });
+    
+    console.log(`✅ [ASYNC-STORAGE] Processed ${Object.keys(exerciseGroups).length} exercises from real data`);
+    
+    // Transform to final AsyncStorage format
+    const historyEntry = {
+      date: date, // Keep original DD/MM/YYYY format
+      exerciseDetails: Object.values(exerciseGroups)
+    };
+    
+    console.log(`✅ [ASYNC-STORAGE] Returning ${Object.keys(exerciseGroups).length} exercises for ${date}`);
+    console.log(`🔍 [ASYNC-STORAGE] Final exerciseGroups:`, JSON.stringify(exerciseGroups, null, 2));
+    console.log(`🔍 [ASYNC-STORAGE] Final historyEntry:`, JSON.stringify(historyEntry, null, 2));
+    
+    // Final response logging
+    const finalResponse = {
+      success: true,
+      data: [historyEntry] // Return as array with single entry, matching AsyncStorage format
+    };
+    console.log(`📤 [ASYNC-STORAGE] FINAL RESPONSE for ${date}:`, JSON.stringify(finalResponse, null, 2));
+    
+    res.json(finalResponse);
+    
+  } catch (error) {
+    console.error('❌ [ASYNC-STORAGE] Error getting workout history:', error.message);
     res.status(500).json({
       success: false,
       error: 'Internal server error',
@@ -2026,6 +2452,527 @@ app.delete('/api/v1/workout-sessions/:id', async (req, res) => {
   }
 });
 
+// TEMPORARY: Cleanup problematic workout sessions (remove after testing)
+app.delete('/api/v1/workout-sessions/cleanup/:profileId', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    const { profileId } = req.params;
+    
+    console.log('🧹 [CLEANUP] Starting cleanup for profile:', profileId);
+    
+    await client.query('BEGIN');
+    
+    // Delete all workout sessions for this profile
+    const workoutSessionsResult = await client.query(`
+      DELETE FROM workout_sessions
+      WHERE profile_id = $1
+      RETURNING id, name, created_at
+    `, [profileId]);
+    
+    console.log('🗑️ [CLEANUP] Deleted workout sessions:', workoutSessionsResult.rows);
+    
+    // Clear completed_date from all routine weeks for this profile
+    const routineWeeksResult = await client.query(`
+      UPDATE routine_weeks 
+      SET completed_date = NULL, updated_at = CURRENT_TIMESTAMP
+      WHERE profile_id = $1 AND completed_date IS NOT NULL
+      RETURNING id, day_name, completed_date
+    `, [profileId]);
+    
+    console.log('📅 [CLEANUP] Cleared completion dates:', routineWeeksResult.rows);
+    
+    await client.query('COMMIT');
+    
+    res.json({
+      success: true,
+      message: 'Cleanup completed successfully',
+      data: {
+        deletedWorkoutSessions: workoutSessionsResult.rows.length,
+        clearedCompletionDates: routineWeeksResult.rows.length,
+        workoutSessions: workoutSessionsResult.rows,
+        routineWeeks: routineWeeksResult.rows
+      }
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ [CLEANUP] Error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// ==========================================
+// TRAINING SESSIONS ENDPOINTS
+// ==========================================
+
+// Get active training session for a profile
+app.get('/api/v1/training-sessions/active/:profileId', async (req, res) => {
+  try {
+    const { profileId } = req.params;
+    
+    console.log(`🔍 Getting active training session for profile ${profileId}`);
+    
+    const result = await pool.query(`
+      SELECT * FROM get_active_training_session($1)
+    `, [profileId]);
+    
+    if (result.rows.length === 0) {
+      return res.json({
+        success: true,
+        data: null,
+        message: 'No active training session found'
+      });
+    }
+    
+    const session = result.rows[0];
+    
+    // Get exercises for the session
+    const exercisesResult = await pool.query(`
+      SELECT 
+        tse.*,
+        e.name as exercise_name,
+        e.image as exercise_image
+      FROM training_session_exercises tse
+      LEFT JOIN exercises e ON tse.exercise_id = e.id
+      WHERE tse.training_session_id = $1
+      ORDER BY tse.order_in_session
+    `, [session.session_id]);
+    
+    // Get progress for each exercise
+    const progressResult = await pool.query(`
+      SELECT *
+      FROM training_session_progress 
+      WHERE training_session_id = $1
+      ORDER BY exercise_id, set_number
+    `, [session.session_id]);
+    
+    const sessionData = {
+      ...session,
+      id: session.session_id, // Map session_id to id for frontend compatibility
+      exercises: exercisesResult.rows,
+      progress: progressResult.rows
+    };
+    
+    console.log(`✅ Found active session: ${session.routine_name} - ${session.day_name}`);
+    
+    res.json({
+      success: true,
+      data: sessionData
+    });
+  } catch (error) {
+    console.error('Error getting active training session:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message
+    });
+  }
+});
+
+// Create new training session
+app.post('/api/v1/training-sessions', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    const { 
+      profile_id, 
+      routine_week_id, 
+      routine_name, 
+      day_of_week, 
+      day_name, 
+      exercises 
+    } = req.body;
+    
+    console.log(`🚀 Creating training session: ${routine_name} - ${day_name} for profile ${profile_id}`);
+    
+    // Check if there's already an active session
+    const activeSessionCheck = await client.query(`
+      SELECT id FROM training_sessions 
+      WHERE profile_id = $1 AND status = 'active'
+    `, [profile_id]);
+    
+    if (activeSessionCheck.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        error: 'Active session already exists',
+        message: 'Complete or cancel the current session before starting a new one'
+      });
+    }
+    
+    // Create training session
+    const sessionResult = await client.query(`
+      INSERT INTO training_sessions (
+        profile_id, routine_week_id, routine_name, day_of_week, day_name
+      ) VALUES ($1, $2, $3, $4, $5)
+      RETURNING id
+    `, [profile_id, routine_week_id, routine_name, day_of_week, day_name]);
+    
+    const sessionId = sessionResult.rows[0].id;
+    
+    // Add exercises to session
+    for (let i = 0; i < exercises.length; i++) {
+      const exercise = exercises[i];
+      
+      await client.query(`
+        INSERT INTO training_session_exercises (
+          training_session_id, exercise_id, exercise_name, exercise_image, 
+          order_in_session, planned_sets
+        ) VALUES ($1, $2, $3, $4, $5, $6)
+      `, [
+        sessionId, 
+        exercise.exercise_id, 
+        exercise.exercise_name, 
+        exercise.exercise_image,
+        i + 1,
+        JSON.stringify(exercise.sets_config || [])
+      ]);
+    }
+    
+    await client.query('COMMIT');
+    
+    console.log(`✅ Created training session ${sessionId}: ${routine_name} - ${day_name}`);
+    
+    res.status(201).json({
+      success: true,
+      data: { sessionId },
+      message: 'Training session created successfully'
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error creating training session:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// Update training session progress
+app.put('/api/v1/training-sessions/:sessionId/progress', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { 
+      exercise_id, 
+      set_number, 
+      reps, 
+      weight, 
+      rir, 
+      rest_pause_details, 
+      drop_set_details, 
+      partials_details,
+      is_completed,
+      current_exercise_index
+    } = req.body;
+    
+    console.log(`📊 [BACKEND] Updating progress for session ${sessionId}, exercise ${exercise_id}, set ${set_number}`, {
+      reps, weight, rir, is_completed, current_exercise_index
+    });
+    
+    // Update or insert progress
+    const result = await pool.query(`
+      INSERT INTO training_session_progress (
+        training_session_id, exercise_id, set_number, reps, weight, rir,
+        rest_pause_details, drop_set_details, partials_details, is_completed
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      ON CONFLICT (training_session_id, exercise_id, set_number)
+      DO UPDATE SET
+        reps = EXCLUDED.reps,
+        weight = EXCLUDED.weight,
+        rir = EXCLUDED.rir,
+        rest_pause_details = EXCLUDED.rest_pause_details,
+        drop_set_details = EXCLUDED.drop_set_details,
+        partials_details = EXCLUDED.partials_details,
+        is_completed = EXCLUDED.is_completed,
+        completed_at = CASE WHEN EXCLUDED.is_completed THEN CURRENT_TIMESTAMP ELSE NULL END,
+        updated_at = CURRENT_TIMESTAMP
+      RETURNING id
+    `, [
+      sessionId, exercise_id, set_number, reps, weight, rir,
+      rest_pause_details ? JSON.stringify(rest_pause_details) : null,
+      drop_set_details ? JSON.stringify(drop_set_details) : null,
+      partials_details ? JSON.stringify(partials_details) : null,
+      is_completed
+    ]);
+    
+    // Update session's current exercise index and last activity
+    if (current_exercise_index !== undefined) {
+      await pool.query(`
+        UPDATE training_sessions 
+        SET current_exercise_index = $1, last_activity = CURRENT_TIMESTAMP
+        WHERE id = $2
+      `, [current_exercise_index, sessionId]);
+    } else {
+      await pool.query(`
+        UPDATE training_sessions 
+        SET last_activity = CURRENT_TIMESTAMP
+        WHERE id = $1
+      `, [sessionId]);
+    }
+    
+    console.log(`✅ Updated progress for session ${sessionId}`);
+    
+    res.json({
+      success: true,
+      data: { progressId: result.rows[0].id },
+      message: 'Progress updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating training session progress:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message
+    });
+  }
+});
+
+// Complete training session
+app.post('/api/v1/training-sessions/:sessionId/complete', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { notes, rating, progressData } = req.body;
+    
+    console.log(`🏁 Completing training session ${sessionId}`, {
+      sessionId,
+      sessionIdType: typeof sessionId,
+      isValidNumber: !isNaN(sessionId) && isFinite(sessionId),
+      params: req.params,
+      body: req.body,
+      hasProgressData: !!progressData,
+      progressDataLength: progressData ? progressData.length : 0
+    });
+    
+    // Validate sessionId
+    if (!sessionId) {
+      const error = 'SessionId is required';
+      console.error('❌ Complete training session failed:', error);
+      return res.status(400).json({
+        success: false,
+        error: 'Bad request',
+        message: error
+      });
+    }
+    
+    const sessionIdNum = parseInt(sessionId, 10);
+    if (isNaN(sessionIdNum) || !isFinite(sessionIdNum)) {
+      const error = `Invalid sessionId: ${sessionId} (must be a valid integer)`;
+      console.error('❌ Complete training session failed:', error);
+      return res.status(400).json({
+        success: false,
+        error: 'Bad request',
+        message: error
+      });
+    }
+    
+    
+    // Process progressData if provided (from local state in frontend)
+    if (progressData && Array.isArray(progressData) && progressData.length > 0) {
+      
+      // Insert or update progress data
+      for (const progressEntry of progressData) {
+        const {
+          exercise_id,
+          set_number,
+          reps,
+          weight,
+          rir,
+          rest_pause_details,
+          drop_set_details,
+          partials_details,
+          is_completed
+        } = progressEntry;
+        
+        
+        // Insert or update the progress record
+        await pool.query(`
+          INSERT INTO training_session_progress (
+            training_session_id,
+            exercise_id,
+            set_number,
+            reps,
+            weight,
+            rir,
+            rest_pause_details,
+            drop_set_details,
+            partials_details,
+            is_completed,
+            completed_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          ON CONFLICT (training_session_id, exercise_id, set_number)
+          DO UPDATE SET
+            reps = EXCLUDED.reps,
+            weight = EXCLUDED.weight,
+            rir = EXCLUDED.rir,
+            rest_pause_details = EXCLUDED.rest_pause_details,
+            drop_set_details = EXCLUDED.drop_set_details,
+            partials_details = EXCLUDED.partials_details,
+            is_completed = EXCLUDED.is_completed,
+            completed_at = EXCLUDED.completed_at,
+            updated_at = CURRENT_TIMESTAMP
+        `, [
+          sessionIdNum,
+          exercise_id,
+          set_number,
+          reps,
+          weight,
+          rir,
+          rest_pause_details ? JSON.stringify(rest_pause_details) : null,
+          drop_set_details ? JSON.stringify(drop_set_details) : null,
+          partials_details ? JSON.stringify(partials_details) : null,
+          is_completed || false,
+          is_completed ? new Date() : null
+        ]);
+      }
+      
+    } else {
+    }
+    
+    // Complete the session using the database function
+    const result = await pool.query(`
+      SELECT complete_training_session($1) as workout_session_id
+    `, [sessionIdNum]);
+    
+    const workoutSessionId = result.rows[0].workout_session_id;
+    
+    
+    // Update workout session with additional notes/rating if provided
+    if (notes || rating) {
+      await pool.query(`
+        UPDATE workout_sessions 
+        SET notes = COALESCE($1, notes), rating = COALESCE($2, rating)
+        WHERE id = $3
+      `, [notes, rating, workoutSessionId]);
+    }
+    
+    console.log(`✅ Training session ${sessionId} completed, workout session ${workoutSessionId} created`);
+    
+    res.json({
+      success: true,
+      data: { workoutSessionId },
+      message: 'Training session completed successfully'
+    });
+  } catch (error) {
+    console.error('Error completing training session:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message
+    });
+  }
+});
+
+// Cancel training session
+app.delete('/api/v1/training-sessions/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    
+    console.log(`❌ Cancelling training session ${sessionId}`);
+    
+    const result = await pool.query(`
+      UPDATE training_sessions 
+      SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1 AND status = 'active'
+      RETURNING id
+    `, [sessionId]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Training session not found or not active'
+      });
+    }
+    
+    console.log(`✅ Training session ${sessionId} cancelled`);
+    
+    res.json({
+      success: true,
+      message: 'Training session cancelled successfully'
+    });
+  } catch (error) {
+    console.error('Error cancelling training session:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message
+    });
+  }
+});
+
+// Get training session details
+app.get('/api/v1/training-sessions/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    
+    console.log(`📋 Getting training session details for ${sessionId}`);
+    
+    // Get session details
+    const sessionResult = await pool.query(`
+      SELECT * FROM training_sessions WHERE id = $1
+    `, [sessionId]);
+    
+    if (sessionResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Training session not found'
+      });
+    }
+    
+    const session = sessionResult.rows[0];
+    
+    // Get exercises
+    const exercisesResult = await pool.query(`
+      SELECT 
+        tse.*,
+        e.name as exercise_name,
+        e.image as exercise_image
+      FROM training_session_exercises tse
+      LEFT JOIN exercises e ON tse.exercise_id = e.id
+      WHERE tse.training_session_id = $1
+      ORDER BY tse.order_in_session
+    `, [sessionId]);
+    
+    // Get progress
+    const progressResult = await pool.query(`
+      SELECT *
+      FROM training_session_progress 
+      WHERE training_session_id = $1
+      ORDER BY exercise_id, set_number
+    `, [sessionId]);
+    
+    const sessionData = {
+      ...session,
+      exercises: exercisesResult.rows,
+      progress: progressResult.rows
+    };
+    
+    console.log(`✅ Retrieved session details for ${sessionId}`);
+    
+    res.json({
+      success: true,
+      data: sessionData
+    });
+  } catch (error) {
+    console.error('Error getting training session details:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message
+    });
+  }
+});
+
 // 404 handler
 app.use('*', (req, res) => {
   res.status(404).json({
@@ -2033,6 +2980,85 @@ app.use('*', (req, res) => {
     error: 'Not Found',
     message: `Route ${req.originalUrl} not found`
   });
+});
+
+// Temporary endpoint to clean data for testing
+app.delete('/api/v1/clean-history/:date', async (req, res) => {
+  try {
+    const { date } = req.params;
+    
+    // Convert DD/MM/YYYY to YYYY-MM-DD for database query
+    const [day, month, year] = date.split('/');
+    const dbDateString = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    
+    console.log(`🧹 [CLEANUP] Cleaning workout data for ${date} (${dbDateString})`);
+    
+    // Delete workout sets first (foreign key constraint)
+    const setsResult = await pool.query(`
+      DELETE FROM workout_sets 
+      WHERE session_id IN (
+        SELECT id FROM workout_sessions 
+        WHERE DATE(started_at) = $1
+      )
+    `, [dbDateString]);
+    
+    // Delete workout sessions
+    const sessionsResult = await pool.query(`
+      DELETE FROM workout_sessions 
+      WHERE DATE(started_at) = $1
+    `, [dbDateString]);
+    
+    console.log(`✅ [CLEANUP] Deleted ${setsResult.rowCount} sets and ${sessionsResult.rowCount} sessions for ${date}`);
+    
+    res.json({
+      success: true,
+      deleted: {
+        sets: setsResult.rowCount,
+        sessions: sessionsResult.rowCount
+      }
+    });
+  } catch (error) {
+    console.error('❌ [CLEANUP] Error cleaning data:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message
+    });
+  }
+});
+
+// Cleanup endpoint for testing
+app.delete('/api/v1/cleanup-workout-data', async (req, res) => {
+  try {
+    console.log('🧹 [CLEANUP] Starting cleanup of all workout data...');
+    
+    // Delete all workout data
+    await pool.query('DELETE FROM workout_sets');
+    await pool.query('DELETE FROM workout_sessions');
+    await pool.query('DELETE FROM training_session_progress');
+    await pool.query('DELETE FROM training_session_exercises');
+    await pool.query('DELETE FROM training_sessions');
+    
+    // Reset routine weeks to not completed
+    await pool.query('UPDATE routine_weeks SET is_completed = FALSE, completed_date = NULL');
+    
+    // Reset training days to not completed
+    await pool.query('UPDATE training_days SET is_completed = FALSE, completed_date = NULL');
+    
+    console.log('✅ [CLEANUP] All workout data cleaned successfully');
+    
+    res.json({
+      success: true,
+      message: 'All workout data cleaned and routine weeks reset'
+    });
+  } catch (error) {
+    console.error('❌ [CLEANUP] Error cleaning workout data:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message
+    });
+  }
 });
 
 // Start server
@@ -2045,4 +3071,40 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🏋️ Routines API: http://192.168.1.50:${PORT}/api/v1/routines`);
   console.log(`📆 Routine Weeks API: http://192.168.1.50:${PORT}/api/v1/routine-weeks`);
   console.log(`🏃 Workout Sessions API: http://192.168.1.50:${PORT}/api/v1/workout-sessions`);
+  console.log(`🎯 Training Sessions API: http://192.168.1.50:${PORT}/api/v1/training-sessions`);
+  console.log(`📚 Workout History (AsyncStorage format): http://192.168.1.50:${PORT}/api/v1/workout-history/:profileId/:date`);
+});
+
+// Cleanup endpoint for testing
+app.delete('/api/v1/cleanup-workout-data', async (req, res) => {
+  try {
+    console.log('🧹 [CLEANUP] Starting cleanup of all workout data...');
+    
+    // Delete all workout data
+    await pool.query('DELETE FROM workout_sets');
+    await pool.query('DELETE FROM workout_sessions');
+    await pool.query('DELETE FROM training_session_progress');
+    await pool.query('DELETE FROM training_session_exercises');
+    await pool.query('DELETE FROM training_sessions');
+    
+    // Reset routine weeks to not completed
+    await pool.query('UPDATE routine_weeks SET is_completed = FALSE, completed_date = NULL');
+    
+    // Reset training days to not completed
+    await pool.query('UPDATE training_days SET is_completed = FALSE, completed_date = NULL');
+    
+    console.log('✅ [CLEANUP] All workout data cleaned successfully');
+    
+    res.json({
+      success: true,
+      message: 'All workout data cleaned and routine weeks reset'
+    });
+  } catch (error) {
+    console.error('❌ [CLEANUP] Error cleaning workout data:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message
+    });
+  }
 });

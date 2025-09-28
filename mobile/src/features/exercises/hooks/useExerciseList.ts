@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { exerciseApi } from '../services';
+import { useExerciseSearch } from './useExerciseSearch';
 
 export const useExerciseList = () => {
   const [refreshing, setRefreshing] = useState(false);
@@ -12,6 +13,9 @@ export const useExerciseList = () => {
     queryFn: exerciseApi.getAll,
   });
 
+  /* Search functionality */
+  const searchHook = useExerciseSearch(exercises);
+
   /* Pull to refresh function */
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -20,10 +24,12 @@ export const useExerciseList = () => {
   }, [queryClient]);
 
   return {
-    exercises,
+    exercises: searchHook.filteredExercises,
+    allExercises: exercises,
     isLoading,
     error,
     refreshing,
     onRefresh,
+    search: searchHook,
   };
 };

@@ -6,3 +6,4 @@ export * from './useExerciseFilters';
 export * from './useExerciseModal';
 export * from './useExerciseNavigation';
 export * from './useExerciseMenu';
+export * from './useExerciseSearch';

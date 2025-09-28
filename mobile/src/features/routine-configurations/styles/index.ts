@@ -1,0 +1,1 @@
+export { configureTrainingDayStyles } from './configureTrainingDayStyles';

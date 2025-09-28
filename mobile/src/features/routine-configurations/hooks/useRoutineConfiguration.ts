@@ -4,8 +4,7 @@ import { routineConfigurationApi } from '../services/routineConfigurationApi';
 import {
   RoutineDayConfiguration,
   ExerciseConfiguration,
-  UpdateRoutineConfigurationDto,
-  InitializeRoutineConfigurationDto
+  UpdateRoutineConfigurationDto
 } from '../types/routineConfiguration';
 
 export const useRoutineConfiguration = (routineWeekId: number, profileId: number) => {
@@ -24,37 +23,29 @@ export const useRoutineConfiguration = (routineWeekId: number, profileId: number
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
-  // Initialize configuration mutation
-  const initializeMutation = useMutation({
-    mutationFn: (data: InitializeRoutineConfigurationDto) =>
-      routineConfigurationApi.initializeConfiguration(routineWeekId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ 
-        queryKey: ['routine-configuration', routineWeekId, profileId] 
-      });
-      Toast.show({
-        type: 'success',
-        text1: 'Configuración inicializada',
-        text2: 'Los ejercicios han sido configurados desde el día de entrenamiento',
-      });
-    },
-    onError: (error: any) => {
-      Toast.show({
-        type: 'error',
-        text1: 'Error al inicializar',
-        text2: error.message || 'No se pudo inicializar la configuración',
-      });
-    },
-  });
 
   // Update configuration mutation
   const updateMutation = useMutation({
     mutationFn: (data: UpdateRoutineConfigurationDto) =>
       routineConfigurationApi.updateConfiguration(routineWeekId, data),
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
+      console.log('✅ Configuration save success:', {
+        routineWeekId,
+        profileId,
+        response: data,
+        exerciseCount: variables.exercises.length
+      });
+      
+      console.log('🔄 Invalidating configuration query:', ['routine-configuration', routineWeekId, profileId]);
       queryClient.invalidateQueries({ 
         queryKey: ['routine-configuration', routineWeekId, profileId] 
       });
+      
+      console.log('🔄 Invalidating routine weeks query:', ['routine-weeks', profileId]);
+      queryClient.invalidateQueries({ 
+        queryKey: ['routine-weeks', profileId] 
+      });
+      
       Toast.show({
         type: 'success',
         text1: 'Configuración guardada',
@@ -74,9 +65,21 @@ export const useRoutineConfiguration = (routineWeekId: number, profileId: number
   const deleteMutation = useMutation({
     mutationFn: () => routineConfigurationApi.deleteConfiguration(routineWeekId, profileId),
     onSuccess: () => {
+      console.log('✅ Configuration delete success:', {
+        routineWeekId,
+        profileId
+      });
+      
+      console.log('🔄 Invalidating configuration query:', ['routine-configuration', routineWeekId, profileId]);
       queryClient.invalidateQueries({ 
         queryKey: ['routine-configuration', routineWeekId, profileId] 
       });
+      
+      console.log('🔄 Invalidating routine weeks query:', ['routine-weeks', profileId]);
+      queryClient.invalidateQueries({ 
+        queryKey: ['routine-weeks', profileId] 
+      });
+      
       Toast.show({
         type: 'success',
         text1: 'Configuración eliminada',
@@ -98,24 +101,18 @@ export const useRoutineConfiguration = (routineWeekId: number, profileId: number
     routineWeek: configuration?.routine_week,
 
     // States
-    isLoading: isLoading || initializeMutation.isPending,
+    isLoading: isLoading,
     isSaving: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,
     error,
 
     // Actions
-    initializeConfiguration: (trainingDayId: number) =>
-      initializeMutation.mutate({
-        profile_id: profileId,
-        training_day_id: trainingDayId,
-      }),
-    
-    updateConfiguration: (exercises: ExerciseConfiguration[]) =>
+    updateConfiguration: (exercises: ExerciseConfiguration[], routineName?: string) =>
       updateMutation.mutate({
         profile_id: profileId,
+        routine_name: routineName,
         exercises: exercises.map(exercise => ({
           exercise_id: exercise.exercise_id,
-          training_day_id: exercise.training_day_id,
           sets_config: exercise.sets_config,
           notes: exercise.notes,
         })),

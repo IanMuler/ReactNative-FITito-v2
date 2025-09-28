@@ -24,9 +24,6 @@ export interface SetConfiguration {
 }
 
 export interface ExerciseConfiguration {
-  config_id?: number;
-  routine_week_id: number;
-  training_day_id?: number;
   exercise_id: number;
   exercise_name: string;
   exercise_image?: string;
@@ -58,7 +55,16 @@ export interface CreateRoutineConfigurationDto {
   }[];
 }
 
-export interface UpdateRoutineConfigurationDto extends CreateRoutineConfigurationDto {}
+export interface UpdateRoutineConfigurationDto {
+  profile_id: number;
+  routine_name?: string;
+  exercises: {
+    exercise_id: number;
+    training_day_id?: number;
+    sets_config: SetConfiguration[];
+    notes?: string;
+  }[];
+}
 
 export interface InitializeRoutineConfigurationDto {
   profile_id: number;

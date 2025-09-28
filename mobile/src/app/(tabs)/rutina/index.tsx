@@ -14,10 +14,17 @@ import RadialGradientBackground from "@/components/ui/RadialGradientBackground";
 import * as Font from "expo-font";
 import { useWeekSchedule } from "@/features/routines/hooks";
 import type { Day } from "@/features/routines/types";
+import { useProfile } from '@/features/profile';
+import Toast from 'react-native-toast-message';
+import { useTrainingSession } from '@/features/training-sessions/hooks/useTrainingSession';
+import { useRoutineConfiguration } from '@/features/routine-configurations';
+import { CreateTrainingSessionRequest } from '@/features/training-sessions/types';
 
 const RoutineScreen = () => {
   const [iconsLoaded, setIconsLoaded] = useState(false);
   const router = useRouter();
+  const { currentProfile, profileId } = useProfile();
+  
   /* Business Logic */
   const {
     days,
@@ -31,6 +38,17 @@ const RoutineScreen = () => {
     removeRoutineFromDay,
   } = useWeekSchedule();
 
+  /* Training Session Logic */
+  const { activeSession, createSession } = useTrainingSession(profileId);
+  
+  /* Current Day Configuration */
+  const currentDay = days[currentDayIndex] || {};
+  const derivedRoutineWeekId = currentDayIndex + 1; // Convert to 1-based index
+  const { 
+    configuration, 
+    exercises 
+  } = useRoutineConfiguration(derivedRoutineWeekId, profileId);
+
   useEffect(() => {
     const loadIcons = async () => {
       await Font.loadAsync({
@@ -40,6 +58,7 @@ const RoutineScreen = () => {
     };
     loadIcons();
   }, []);
+
 
   /* Event Handlers */
   const assignTrainingDay = (day: Day) => {
@@ -58,8 +77,12 @@ const RoutineScreen = () => {
 
   const removeTrainingDay = async (day: Day) => {
     console.log(`🗑️ Removing training day: ${day.name}`);
-    await removeRoutineFromDay(day.name);
-    console.log(`✅ Training day ${day.name} removed completely`);
+    try {
+      await removeRoutineFromDay(day.name);
+      console.log(`✅ Training day ${day.name} removed completely`);
+    } catch (error) {
+      console.error(`❌ Failed to remove training day ${day.name}:`, error);
+    }
   };
 
   const handleDayPress = (dayIndex: number) => {
@@ -76,10 +99,101 @@ const RoutineScreen = () => {
     }
   };
 
+  const handleStartSession = async () => {
+    if (!currentProfile || !currentDay?.trainingDayName) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'No hay rutina asignada para hoy',
+      });
+      return;
+    }
+
+    try {
+      // Si ya hay una sesión activa, navegar a ella
+      if (activeSession) {
+        router.push("/(tabs)/rutina/sesion-de-entrenamiento");
+        return;
+      }
+
+      // Verificar que hay ejercicios configurados
+      if (!exercises || exercises.length === 0) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'No hay ejercicios configurados para este día',
+        });
+        return;
+      }
+
+      // Crear nueva sesión usando el backend
+      const sessionData: CreateTrainingSessionRequest = {
+        profile_id: profileId,
+        routine_week_id: derivedRoutineWeekId,
+        routine_name: currentDay.trainingDayName || 'Rutina',
+        day_of_week: derivedRoutineWeekId,
+        day_name: currentDay.name,
+        exercises: exercises.map((exercise, index) => ({
+          exercise_id: exercise.exercise_id,
+          exercise_name: exercise.exercise_name,
+          exercise_image: exercise.exercise_image,
+          sets_config: exercise.sets_config,
+        })),
+      };
+
+      await createSession(sessionData);
+      
+      Toast.show({
+        type: 'success',
+        text1: 'Sesión iniciada',
+        text2: '¡Comienza tu entrenamiento!',
+      });
+
+      router.push("/(tabs)/rutina/sesion-de-entrenamiento");
+    } catch (error) {
+      console.error('Error starting session:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'No se pudo iniciar la sesión',
+      });
+    }
+  };
+
   /* Derived State */
-  const currentDay = days[currentDayIndex] || {};
   const isCurrentDayCompletedToday = isDayCompletedToday(currentDay);
   const isSessionDisabled = isCurrentDayCompletedToday || !currentDay?.trainingDayName;
+
+  /* Debug logging for completion status */
+  useEffect(() => {
+    if (days.length > 0) {
+      const today = new Date().toISOString().split('T')[0];
+      console.log('🔍 [Rutina Index] Debug completion status:', {
+        today,
+        currentDayIndex,
+        totalDays: days.length,
+      });
+      
+      days.forEach((day, index) => {
+        const isCompleted = isDayCompletedToday(day);
+        console.log(`📅 [Rutina Index] Day ${index} (${day.name}):`, {
+          completedDate: day.completedDate,
+          today,
+          matches: day.completedDate === today,
+          isCompleted,
+          rest: day.rest,
+          trainingDayName: day.trainingDayName,
+        });
+      });
+      
+      console.log('🎯 [Rutina Index] Current day status:', {
+        currentDay: currentDay.name,
+        isCurrentDayCompletedToday,
+        isSessionDisabled,
+        activeSession: !!activeSession,
+      });
+    }
+  }, [days, currentDayIndex, isDayCompletedToday, currentDay, isCurrentDayCompletedToday, isSessionDisabled, activeSession]);
 
   const ButtonText = currentDay.rest
     ? "Día de descanso"
@@ -87,7 +201,9 @@ const RoutineScreen = () => {
       ? "No hay entrenamiento asignado"
       : isCurrentDayCompletedToday
         ? "Sesión finalizada"
-        : "Empezar sesión";
+        : activeSession
+          ? "Continuar sesión"
+          : "Empezar sesión";
 
   /* Menu Options */
   const options = (day: Day) => [
@@ -138,7 +254,7 @@ const RoutineScreen = () => {
   const sessionButton = (
     <TouchableOpacity
       style={[styles.button, isSessionDisabled && styles.disabledButton]}
-      onPress={() => router.push("/(tabs)/rutina/sesion-de-entrenamiento")}
+      onPress={handleStartSession}
       disabled={isSessionDisabled}
       testID="button-start-session"
     >

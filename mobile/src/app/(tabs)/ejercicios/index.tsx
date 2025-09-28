@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Image, Modal, RefreshControl } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Image, Modal, RefreshControl, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import LinearGradientItem from '@/components/LinearGradientItem';
 import Menu, { MenuItem } from '@/components/Menu';
@@ -15,7 +15,7 @@ import { exerciseListStyles } from '@/features/exercises/styles';
 
 const ExercisesPage: React.FC = () => {
   /* Hooks  */
-  const { exercises, refreshing, onRefresh } = useExerciseList();
+  const { exercises, refreshing, onRefresh, search } = useExerciseList();
   const { deleteExercise } = useExerciseActions();
   const { modalVisible, exerciseToDelete, openDeleteModal, closeModal } = useExerciseModal();
   const { navigateToAddExercise, navigateToEditExercise } = useExerciseNavigation();
@@ -36,6 +36,29 @@ const ExercisesPage: React.FC = () => {
   const headerSection = (
     <View style={exerciseListStyles.header}>
       <Text style={exerciseListStyles.title}>Ejercicios</Text>
+    </View>
+  );
+
+  const searchSection = (
+    <View style={exerciseListStyles.searchContainer}>
+      <View style={exerciseListStyles.searchIconContainer}>
+        <Ionicons name="search" size={20} color="#FFFFFF" />
+      </View>
+      <TextInput
+        style={exerciseListStyles.searchInput}
+        placeholder="Buscar ejercicios..."
+        placeholderTextColor="#A5A5A5"
+        value={search.searchTerm}
+        onChangeText={search.handleSearchChange}
+      />
+      {search.hasSearchTerm && (
+        <TouchableOpacity
+          style={exerciseListStyles.clearIconContainer}
+          onPress={search.clearSearch}
+        >
+          <Ionicons name="close" size={20} color="#FFFFFF" />
+        </TouchableOpacity>
+      )}
     </View>
   );
 
@@ -129,6 +152,7 @@ const ExercisesPage: React.FC = () => {
     <View style={exerciseListStyles.container} testID="exercises-screen">
       <RadialGradientBackground />
       {headerSection}
+      {searchSection}
       {exerciseItems}
       {addButton}
       {deleteModalSection}

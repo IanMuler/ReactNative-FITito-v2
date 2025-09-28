@@ -1,0 +1,1 @@
+export { HistoryExerciseCard } from './component';

@@ -104,4 +104,31 @@ export const exerciseListStyles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 14,
   },
+  searchContainer: {
+    marginBottom: 15,
+    position: 'relative',
+  },
+  searchInput: {
+    backgroundColor: "#1F2940",
+    color: "#FFFFFF",
+    fontSize: 16,
+    paddingVertical: 12,
+    paddingLeft: 45,
+    paddingRight: 45,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#2979FF",
+  },
+  searchIconContainer: {
+    position: 'absolute',
+    left: 15,
+    top: 12,
+    zIndex: 1,
+  },
+  clearIconContainer: {
+    position: 'absolute',
+    right: 15,
+    top: 12,
+    zIndex: 1,
+  },
 });

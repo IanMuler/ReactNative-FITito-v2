@@ -28,6 +28,18 @@
 \echo 'Running migration 008: Routine Day Configurations...'
 \i migrations/008-create-routine-day-configurations.sql
 
+\echo 'Running migration 009: Unify Routine Weeks Configurations...'
+\i migrations/009-unify-routine-weeks-configurations.sql
+
+\echo 'Running migration 010: Training Sessions...'
+\i migrations/010-create-training-sessions.sql
+
+\echo 'Running migration 011: Fix Complete Training Session Function...'
+\i migrations/011-fix-complete-training-session.sql
+
+\echo 'Running migration 012: Fix Training Days Name Constraint...'
+\i migrations/012-fix-training-days-name-constraint.sql
+
 -- Run seeds
 \echo 'Running seed 001: Exercises...'
 \i seeds/001-exercises-seed.sql

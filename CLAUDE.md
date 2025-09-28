@@ -1134,3 +1134,189 @@ interface UpdateExerciseDto extends CreateExerciseDto {}
 - `src/app/(tabs)/ejercicios/anadir-ejercicio.tsx` - Form handling and image picker
 - `src/components/ProfileSwitch.tsx` - Simple component with state management
 - `src/services/exerciseApi.ts` - API service layer implementation
+
+## Feature Organization and Modularization Best Practices
+
+### Feature-Based Separation of Concerns
+
+**CRITICAL**: Always separate inline code from large components into feature-specific modules following this structure:
+
+```
+src/features/[feature-name]/
+├── components/         # Feature-specific components
+├── hooks/             # Feature-specific custom hooks  
+├── services/          # Feature-specific API calls
+├── store/             # Feature-specific state management
+├── types/             # Feature-specific TypeScript types
+├── styles/            # Feature-specific StyleSheet definitions
+├── utils/             # Feature-specific utility functions
+└── index.ts           # Feature barrel exports
+```
+
+### Types Organization
+
+**Extract inline types when components exceed 200 lines or have 5+ type definitions**:
+
+```typescript
+// ❌ AVOID - Inline types in large components
+const MyComponent = () => {
+  interface LocalType1 { ... }
+  interface LocalType2 { ... }
+  type LocalType3 = string | number;
+  // ... 800+ lines of component code
+};
+
+// ✅ CORRECT - Extract to feature types
+// src/features/my-feature/types/componentTypes.ts
+export interface ComponentType1 { ... }
+export interface ComponentType2 { ... }
+export type ComponentType3 = string | number;
+
+// src/features/my-feature/types/index.ts
+export * from './componentTypes';
+
+// Component imports types cleanly
+import { ComponentType1, ComponentType2 } from '@/features/my-feature/types';
+```
+
+### Styles Organization
+
+**Extract StyleSheet when components have 3+ style objects or 100+ lines of styles**:
+
+```typescript
+// ❌ AVOID - Inline styles in large components
+const MyComponent = () => {
+  const styles = StyleSheet.create({
+    container: { ... },
+    header: { ... },
+    // ... 50+ more style objects
+  });
+  
+  return <View style={styles.container}>...</View>;
+};
+
+// ✅ CORRECT - Extract to feature styles
+// src/features/my-feature/styles/componentStyles.ts
+import { StyleSheet } from 'react-native';
+
+export const componentStyles = StyleSheet.create({
+  container: { ... },
+  header: { ... },
+  // ... all style definitions
+});
+
+// src/features/my-feature/styles/index.ts
+export { componentStyles } from './componentStyles';
+
+// Component imports styles cleanly
+import { componentStyles } from '@/features/my-feature/styles';
+```
+
+### Utils Organization
+
+**Extract utility functions when they have business logic or are 10+ lines**:
+
+```typescript
+// ❌ AVOID - Inline utility functions
+const MyComponent = () => {
+  const validateForm = (data) => {
+    // 20+ lines of validation logic
+  };
+  
+  const transformData = (input) => {
+    // 15+ lines of transformation logic
+  };
+  
+  const formatDisplay = (value) => {
+    // 10+ lines of formatting logic
+  };
+  
+  // Component logic continues...
+};
+
+// ✅ CORRECT - Extract to feature utils
+// src/features/my-feature/utils/validation.ts
+export const validateForm = (data) => {
+  // Pure validation logic
+};
+
+// src/features/my-feature/utils/dataTransform.ts
+export const transformData = (input) => {
+  // Pure transformation logic
+};
+
+// src/features/my-feature/utils/formatting.ts
+export const formatDisplay = (value) => {
+  // Pure formatting logic
+};
+
+// src/features/my-feature/utils/index.ts
+export * from './validation';
+export * from './dataTransform';
+export * from './formatting';
+
+// Component imports utilities cleanly
+import { validateForm, transformData, formatDisplay } from '@/features/my-feature/utils';
+```
+
+### Component Modularization Decision Matrix
+
+**Extract to Feature Modules When**:
+- ✅ Component has 200+ lines
+- ✅ Component has 5+ type definitions
+- ✅ Component has 3+ utility functions
+- ✅ Component has 100+ lines of styles
+- ✅ Multiple components would benefit from shared types/utils/styles
+
+**Keep Inline When**:
+- ✅ Component has <200 lines total
+- ✅ Types/styles/utils are simple and specific to this component only
+- ✅ No other components would benefit from the extracted code
+
+### Barrel Export Pattern
+
+**Always create index.ts files for clean imports**:
+
+```typescript
+// src/features/my-feature/index.ts
+export * from './components';
+export * from './hooks';
+export * from './services';
+export * from './store';
+export * from './types';
+export * from './styles';
+export * from './utils';
+
+// Clean imports in consuming components
+import { MyComponent, useMyFeature, myFeatureApi, MyFeatureType } from '@/features/my-feature';
+```
+
+### Progressive Refactoring Approach
+
+**Start with inline code, then refactor when thresholds are met**:
+
+1. **Initial Development**: Write everything inline in the component
+2. **Types Extraction**: When 5+ types or 200+ total lines, extract to `types/`
+3. **Styles Extraction**: When 3+ style objects or 100+ style lines, extract to `styles/`
+4. **Utils Extraction**: When utility functions have business logic, extract to `utils/`
+5. **Components Extraction**: When sub-components have complex logic, extract to `components/`
+
+### Enforcement Rules
+
+**MUST follow these rules for codebase consistency**:
+
+- ❌ **NEVER** leave large inline type definitions in components >200 lines
+- ❌ **NEVER** leave large inline StyleSheets in components with 3+ style objects
+- ❌ **NEVER** leave complex utility functions inline when they have business logic
+- ✅ **ALWAYS** create barrel exports for clean imports
+- ✅ **ALWAYS** follow the feature directory structure exactly as specified
+- ✅ **ALWAYS** extract when the thresholds are met, don't wait
+
+### Benefits of This Organization
+
+1. **Maintainability**: Easy to find and modify specific concerns
+2. **Reusability**: Types, styles, and utils can be shared across components
+3. **Testability**: Extracted utilities can be tested independently
+4. **Readability**: Components focus on logic, not boilerplate
+5. **Team Collaboration**: Clear ownership and organization of code
+6. **Performance**: Better tree-shaking and bundle optimization

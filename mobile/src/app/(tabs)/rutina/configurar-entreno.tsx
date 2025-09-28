@@ -2,151 +2,74 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   TouchableOpacity,
   ScrollView,
+  TextInput,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Picker } from "@react-native-picker/picker";
 import RadialGradientBackground from "@/components/ui/RadialGradientBackground";
-import NumberInput from "@/components/ui/NumberInput";
 import { useProfile } from "@/features/profile";
 import { useRoutineConfiguration } from "@/features/routine-configurations";
 import { useTrainingDayList } from "@/features/training-days";
 import { useWeekSchedule } from "@/features/routines";
-
-export type RPDetail = {
-  value: string;
-  time: number;
-};
-
-export type DSDetail = {
-  reps: string;
-  peso: string;
-};
-
-export type PartialDetail = {
-  reps: string;
-};
-
-export type ExerciseDetail = {
-  name: string;
-  sets: {
-    reps: string;
-    weight: string;
-    rir: string;
-    rp?: RPDetail[];
-    ds?: DSDetail[];
-    partials?: PartialDetail;
-  }[];
-  image: string;
-};
+import { useTrainingSession } from "@/features/training-sessions/hooks/useTrainingSession";
+import { CreateTrainingSessionRequest } from "@/features/training-sessions/types";
+import Toast from 'react-native-toast-message';
+import {
+  RPDetail,
+  DSDetail,
+  PartialDetail,
+  ExerciseDetail,
+  ButtonsActiveState
+} from "@/features/routine-configurations/types";
+import { configureTrainingDayStyles } from "@/features/routine-configurations/styles";
+import {
+  getDayNameToId,
+  createTemplateFromTrainingDay,
+  checkIfAllInputsAreFilled,
+  initializeButtons
+} from "@/features/routine-configurations/utils";
 
 const ConfigureTrainingDayScreen = () => {
+  /* State */
   const [exerciseDetails, setExerciseDetails] = useState<ExerciseDetail[]>([]);
   const [isSaveEnabled, setIsSaveEnabled] = useState(false);
-  const [buttonsActive, setButtonsActive] = useState<Record<string, boolean>>({});
-  
+  const [buttonsActive, setButtonsActive] = useState<ButtonsActiveState>({});
+
+  /* Routing and Parameters */
   const router = useRouter();
   const { dayName, trainingDayName } = useLocalSearchParams();
-  const { currentProfile, profileId, isLoading: profileIsLoading } = useProfile();
   
-  console.log('🔄 ConfigureTrainingDayScreen render');
-  console.log('📊 Component params:', { dayName, trainingDayName });
-  console.log('📊 Profile state:', { currentProfile, profileId, profileIsLoading });
+  /* Request hooks */
+  const { currentProfile, profileId, isLoading: profileIsLoading } = useProfile();
 
-  // Derive routineWeekId from dayName
-  const getDayNameToId = (dayName: string): number => {
-    const dayMap: Record<string, number> = {
-      'Lunes': 1, 'Martes': 2, 'Miércoles': 3, 'Jueves': 4, 
-      'Viernes': 5, 'Sábado': 6, 'Domingo': 7
-    };
-    console.log('🔍 Mapping day:', dayName, 'to ID:', dayMap[dayName] || 1);
-    return dayMap[dayName] || 1;
-  };
+  /* Data processing */
 
   const derivedRoutineWeekId = dayName ? getDayNameToId(dayName as string) : 1;
-  console.log('📊 Derived routine week ID:', derivedRoutineWeekId, 'for day:', dayName);
 
-  // Get configuration from backend
-  const { 
-    configuration, 
-    exercises, 
+  const {
+    configuration,
+    exercises,
     routineWeek,
-    isLoading, 
+    isLoading,
     isSaving,
-    updateConfiguration,
-    initializeConfiguration
+    updateConfiguration
   } = useRoutineConfiguration(derivedRoutineWeekId, profileId);
 
   const { trainingDays } = useTrainingDayList();
   const { assignRoutineToDay } = useWeekSchedule();
+  const { createSession, activeSession } = useTrainingSession(profileId);
 
-  // Auto-assign training day when coming from asignar-entreno flow
+  /* Effects */
   useEffect(() => {
-    const autoAssignAndInitialize = async () => {
-      console.log('🔄 AutoAssign useEffect triggered');
-      console.log('📊 State check:', {
-        profileIsLoading,
-        dayName,
-        trainingDayName,
-        configuration,
-        isLoading,
-        trainingDaysLength: trainingDays?.length || 0
-      });
-      
-      if (profileIsLoading || !currentProfile || !dayName || !trainingDayName) {
-        console.log('❌ Early return - missing basic data');
-        return;
-      }
-      
-      // If we have trainingDayName but no configuration, auto-assign and initialize
-      if (trainingDayName && !configuration) {
-        console.log('🎯 Conditions met, looking for training day:', trainingDayName);
-        const trainingDay = trainingDays?.find(td => td.name === trainingDayName);
-        console.log('🔍 Found training day:', trainingDay);
-        
-        if (trainingDay) {
-          console.log('✅ Assigning routine to day:', dayName, 'with training day ID:', trainingDay.id);
-          try {
-            await assignRoutineToDay(dayName as string, trainingDay.id);
-            console.log('✅ Assignment successful, now initializing configuration');
-            initializeConfiguration(trainingDay.id);
-          } catch (error) {
-            console.error('❌ Error in assignment:', error);
-          }
-        } else {
-          console.log('❌ Training day not found in list');
-        }
-      } else {
-        console.log('⏭️ Skipping auto-assignment:', {
-          hasTrainingDayName: !!trainingDayName,
-          hasConfiguration: !!configuration
-        });
-      }
-    };
-    
-    autoAssignAndInitialize();
-  }, [profileIsLoading, currentProfile, dayName, trainingDayName, configuration, isLoading, trainingDays]);
-
-  // Convert backend exercises to frontend format when configuration loads
-  useEffect(() => {
-    console.log('🔄 Convert exercises useEffect triggered');
-    console.log('📊 Convert state check:', {
-      profileIsLoading,
-      hasConfiguration: !!configuration,
-      exercisesLength: exercises?.length || 0
-    });
-    
-    if (profileIsLoading || !currentProfile || !configuration) {
-      console.log('❌ Convert early return - no profile or configuration');
+    if (profileIsLoading || !currentProfile) {
       return;
     }
-    
-    if (exercises && exercises.length > 0) {
-      console.log('✅ Converting exercises from backend format:', exercises);
-      // Convert from backend format to original format
+
+    if (configuration && exercises && exercises.length > 0) {
+      // Convert from backend format to original format (existing configuration)
       const convertedDetails = exercises.map((exercise) => ({
         name: exercise.exercise_name,
         sets: exercise.sets_config.map((set) => ({
@@ -159,66 +82,39 @@ const ConfigureTrainingDayScreen = () => {
         })),
         image: exercise.exercise_image || "",
       }));
-      console.log('✅ Converted exercise details:', convertedDetails);
       setExerciseDetails(convertedDetails);
-      initializeButtons(convertedDetails);
-    } else {
-      console.log('⚠️ No exercises to convert');
-    }
-  }, [configuration, exercises, profileIsLoading, currentProfile]);
-
-  const initializeButtons = (exerciseDetails: ExerciseDetail[]) => {
-    const initialButtonsActive: Record<string, boolean> = {};
-    exerciseDetails.forEach((exercise, exerciseIndex) => {
-      exercise.sets.forEach((set, setIndex) => {
-        if (set.rp && set.rp.length > 0) {
-          const keyRP = `${exerciseIndex}-${setIndex}-RP`;
-          initialButtonsActive[keyRP] = true;
-        }
-        if (set.ds && set.ds.length > 0) {
-          const keyDS = `${exerciseIndex}-${setIndex}-DS`;
-          initialButtonsActive[keyDS] = true;
-        }
-        if (set.partials) {
-          const keyP = `${exerciseIndex}-${setIndex}-P`;
-          initialButtonsActive[keyP] = true;
-        }
+      setButtonsActive(initializeButtons(convertedDetails));
+    } else if (configuration && (!exercises || exercises.length === 0) && trainingDays && trainingDays.length > 0) {
+      // No configuration exists, create template from first training day
+      
+      // Use the first available training day as template
+      const firstTrainingDay = trainingDays[0];
+      
+      // Fetch the training day with exercises to create template
+      import('../../../features/training-days/services/trainingDayApi').then(({ trainingDayApi }) => {
+        trainingDayApi.getById(firstTrainingDay.id, profileId)
+          .then((trainingDayData) => {
+            if (trainingDayData.exercises && trainingDayData.exercises.length > 0) {
+              const templateDetails = createTemplateFromTrainingDay(trainingDayData.exercises);
+              setExerciseDetails(templateDetails);
+              setButtonsActive(initializeButtons(templateDetails));
+            }
+          })
+          .catch((error) => {
+            console.error('Error loading training day for template:', error);
+          });
       });
-    });
-    setButtonsActive(initialButtonsActive);
-  };
+    }
+  }, [configuration, exercises, profileIsLoading, currentProfile, trainingDays, profileId]);
 
   useEffect(() => {
-    checkIfAllInputsAreFilled();
-  }, [exerciseDetails]);
+    const isEnabled = checkIfAllInputsAreFilled(exerciseDetails, buttonsActive);
+    setIsSaveEnabled(isEnabled);
+  }, [exerciseDetails, buttonsActive]);
 
-  const checkIfAllInputsAreFilled = () => {
-    for (const exercise of exerciseDetails) {
-      for (const set of exercise.sets) {
-        if (!set.reps || !set.weight || !set.rir) {
-          setIsSaveEnabled(false);
-          return;
-        }
-        if (buttonsActive[`${exerciseDetails.indexOf(exercise)}-${exercise.sets.indexOf(set)}-RP`] &&
-          (set.rp?.some(rpDetail => !rpDetail.value || !rpDetail.time) || !set.rp?.length)) {
-          setIsSaveEnabled(false);
-          return;
-        }
-        if (buttonsActive[`${exerciseDetails.indexOf(exercise)}-${exercise.sets.indexOf(set)}-DS`] &&
-          (set.ds?.some(dsDetail => !dsDetail.reps || !dsDetail.peso) || !set.ds?.length)) {
-          setIsSaveEnabled(false);
-          return;
-        }
-        if (buttonsActive[`${exerciseDetails.indexOf(exercise)}-${exercise.sets.indexOf(set)}-P`] &&
-          (!set.partials || !set.partials.reps)) {
-          setIsSaveEnabled(false);
-          return;
-        }
-      }
-    }
-    setIsSaveEnabled(true);
-  };
+  /* Utility Functions */
 
+  /* Handlers */
   const handleSave = async () => {
     const cleanedExerciseDetails = exerciseDetails.map((exercise) => {
       return {
@@ -243,6 +139,8 @@ const ConfigureTrainingDayScreen = () => {
     if (derivedRoutineWeekId && cleanedExerciseDetails.length > 0) {
       const backendFormat = cleanedExerciseDetails.map((exercise, index) => ({
         exercise_id: 1, // This should be resolved from exercise name
+        exercise_name: exercise.name,
+        order_index: index,
         training_day_id: trainingDays?.find(td => td.name === trainingDayName)?.id,
         sets_config: exercise.sets.map((set) => ({
           reps: set.reps,
@@ -252,41 +150,68 @@ const ConfigureTrainingDayScreen = () => {
           ds: set.ds || [],
           partials: set.partials
         })),
-        notes: null
+        notes: undefined
       }));
-      
-      updateConfiguration(backendFormat);
+
+      updateConfiguration(backendFormat, trainingDayName as string);
     }
-    
+
     router.push({ pathname: "/(tabs)/rutina" });
   };
 
-  const handleInitializeFromTrainingDay = async () => {
-    console.log('🔄 handleInitializeFromTrainingDay called');
-    const trainingDay = trainingDays?.find(td => td.name === trainingDayName);
-    console.log('📊 Initialize check:', {
-      trainingDay,
-      dayName,
-      derivedRoutineWeekId,
-      trainingDayName
-    });
-    
-    if (trainingDay && dayName && derivedRoutineWeekId) {
-      console.log('✅ All conditions met, proceeding with assignment and initialization');
-      try {
-        // First assign the training day to the routine week
-        console.log('🎯 Assigning routine to day:', dayName, 'with training day ID:', trainingDay.id);
-        await assignRoutineToDay(dayName as string, trainingDay.id);
-        console.log('✅ Assignment completed, now initializing configuration');
-        // Then initialize the configuration
-        initializeConfiguration(trainingDay.id);
-      } catch (error) {
-        console.error('❌ Error in handleInitializeFromTrainingDay:', error);
-      }
-    } else {
-      console.log('❌ Missing required data for initialization');
+  const handleStartTrainingSession = async () => {
+    if (activeSession) {
+      Toast.show({
+        type: 'info',
+        text1: 'Sesión activa',
+        text2: 'Ya tienes una sesión de entrenamiento en curso',
+      });
+      router.push('/(tabs)/rutina/sesion-de-entrenamiento');
+      return;
+    }
+
+    if (!exercises || exercises.length === 0) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'No hay ejercicios configurados para este día',
+      });
+      return;
+    }
+
+    try {
+      const sessionData: CreateTrainingSessionRequest = {
+        profile_id: profileId,
+        routine_week_id: derivedRoutineWeekId,
+        routine_name: routineWeek?.routine_name || 'Rutina sin nombre',
+        day_of_week: derivedRoutineWeekId,
+        day_name: dayName as string,
+        exercises: exercises.map((exercise, index) => ({
+          exercise_id: exercise.exercise_id,
+          exercise_name: exercise.exercise_name,
+          exercise_image: exercise.exercise_image,
+          sets_config: exercise.sets_config,
+        })),
+      };
+
+      await createSession(sessionData);
+      
+      Toast.show({
+        type: 'success',
+        text1: 'Sesión iniciada',
+        text2: '¡Comienza tu entrenamiento!',
+      });
+
+      router.push('/(tabs)/rutina/sesion-de-entrenamiento');
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'No se pudo iniciar la sesión de entrenamiento',
+      });
     }
   };
+
 
   const updateExerciseDetail = (
     exerciseIndex: number,
@@ -323,7 +248,6 @@ const ConfigureTrainingDayScreen = () => {
 
     updatedDetails[exerciseIndex].sets = updatedSets;
     setExerciseDetails(updatedDetails);
-    checkIfAllInputsAreFilled();
   };
 
   const toggleButton = (exerciseIndex: number, setIndex: number, type: "RP" | "DS" | "P") => {
@@ -360,7 +284,6 @@ const ConfigureTrainingDayScreen = () => {
     updatedSets[setIndex] = currentSet;
     updatedDetails[exerciseIndex].sets = updatedSets;
     setExerciseDetails(updatedDetails);
-    checkIfAllInputsAreFilled();
   };
 
   const addSet = (exerciseIndex: number) => {
@@ -405,377 +328,531 @@ const ConfigureTrainingDayScreen = () => {
     setExerciseDetails(updatedDetails);
   };
 
+  /* Sub-components as JSX fragments */
+  const headerSection = (
+    <View style={configureTrainingDayStyles.headerSection}>
+      <View style={configureTrainingDayStyles.headerTop}>
+        <View style={configureTrainingDayStyles.dayIndicator}>
+          <Ionicons name="calendar-outline" size={16} color="#64B5F6" />
+          <Text style={configureTrainingDayStyles.dayText}>{dayName}</Text>
+        </View>
+        <Text style={configureTrainingDayStyles.actionLabel}>CONFIGURACIÓN</Text>
+      </View>
+      <Text style={configureTrainingDayStyles.mainTitle}>
+        {trainingDayName}
+      </Text>
+    </View>
+  );
+
+  const loadingState = (
+    <View style={configureTrainingDayStyles.centered}>
+      <Text style={configureTrainingDayStyles.loadingText}>Cargando configuración...</Text>
+    </View>
+  );
+
+  const emptyState = (
+    <View style={configureTrainingDayStyles.centered}>
+      <Text style={configureTrainingDayStyles.emptyText}>
+        No hay ejercicios configurados
+      </Text>
+      <Text style={configureTrainingDayStyles.emptySubtext}>
+        Para configurar este día, primero debes asignar ejercicios desde la sección de ejercicios
+      </Text>
+    </View>
+  );
+
+  /* Conditional rendering */
+  if (isLoading) {
+    return (
+      <View style={configureTrainingDayStyles.container}>
+        <RadialGradientBackground />
+        <ScrollView contentContainerStyle={configureTrainingDayStyles.scrollViewContent}>
+          {headerSection}
+          {loadingState}
+        </ScrollView>
+      </View>
+    );
+  }
+
+  if (!isLoading && exerciseDetails.length === 0) {
+    return (
+      <View style={configureTrainingDayStyles.container}>
+        <RadialGradientBackground />
+        <ScrollView contentContainerStyle={configureTrainingDayStyles.scrollViewContent}>
+          {headerSection}
+          {emptyState}
+        </ScrollView>
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.container}>
+    <View style={configureTrainingDayStyles.container}>
       <RadialGradientBackground />
-      <ScrollView contentContainerStyle={styles.scrollViewContent}>
-        <Text style={styles.title} testID="config-title">
-          Configurar {trainingDayName} para {dayName}
-        </Text>
-        
-        {isLoading && (
-          <View style={styles.centered}>
-            <Text style={styles.loadingText}>Cargando configuración...</Text>
-          </View>
-        )}
-        
-        {!isLoading && !configuration && (
-          <View style={styles.centered}>
-            <Text style={styles.emptyText}>
-              No hay ejercicios configurados
-            </Text>
-            <TouchableOpacity
-              style={styles.button}
-              onPress={handleInitializeFromTrainingDay}
-              testID="button-initialize"
-            >
-              <Text style={styles.buttonText}>
-                Inicializar desde día de entrenamiento
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        
+      <ScrollView contentContainerStyle={configureTrainingDayStyles.scrollViewContent}>
+        {headerSection}
+
         {exerciseDetails.map((exercise, exerciseIndex) => (
-          <View key={exerciseIndex} style={styles.exerciseContainer} testID={`exercise-${exercise.name}`}>
-            <Text style={styles.exerciseName} testID={`exercise-name-${exercise.name}`}>{exercise.name}</Text>
-            
+          <View key={exerciseIndex} style={configureTrainingDayStyles.exerciseSection} testID={`exercise-${exercise.name}`}>
+            <Text style={configureTrainingDayStyles.exerciseTitle} testID={`exercise-name-${exercise.name}`}>{exercise.name}</Text>
+
             {exercise.sets.map((set, setIndex) => (
-              <View key={setIndex} style={{ marginBottom: 10 }}>
-                <View style={styles.setRow} testID={`exercise-set-${exercise.name}-${setIndex}`}>
-                  <Text style={styles.setText}>Set {setIndex + 1}</Text>
-                  <View style={[styles.setColumn, { flex: 1 }]}>
-                    <View style={styles.setRow}>
-                      <NumberInput
+              <View key={setIndex} style={configureTrainingDayStyles.exerciseCard}>
+                <View style={configureTrainingDayStyles.setHeader}>
+                  <Text style={configureTrainingDayStyles.setLabel}>Serie {setIndex + 1}</Text>
+                </View>
+
+                {/* Inputs Section */}
+                <View style={configureTrainingDayStyles.inputsSection}>
+                  <View style={configureTrainingDayStyles.inputField}>
+                    <Text style={configureTrainingDayStyles.fieldLabel}>Repeticiones</Text>
+                    <View style={configureTrainingDayStyles.inputGroup}>
+                      <TouchableOpacity
+                        style={[configureTrainingDayStyles.controlBtn, { left: 0 }]}
+                        onPress={() => {
+                          const currentValue = parseInt(set.reps) || 0;
+                          const newValue = Math.max(0, currentValue - 1);
+                          updateExerciseDetail(exerciseIndex, setIndex, "reps", newValue.toString());
+                        }}
+                      >
+                        <Text style={configureTrainingDayStyles.controlBtnText}>−</Text>
+                      </TouchableOpacity>
+                      <TextInput
+                        style={configureTrainingDayStyles.setInput}
                         value={set.reps}
                         onChangeText={(text) =>
                           updateExerciseDetail(exerciseIndex, setIndex, "reps", text)
                         }
-                        placeholder="Reps"
+                        placeholder="0"
+                        placeholderTextColor="#a5a5a5"
+                        keyboardType="numeric"
                         testID={`input-reps-${exercise.name}-${setIndex}`}
                       />
-                      <NumberInput
+                      <TouchableOpacity
+                        style={[configureTrainingDayStyles.controlBtn, { right: 0 }]}
+                        onPress={() => {
+                          const currentValue = parseInt(set.reps) || 0;
+                          updateExerciseDetail(exerciseIndex, setIndex, "reps", (currentValue + 1).toString());
+                        }}
+                      >
+                        <Text style={configureTrainingDayStyles.controlBtnText}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <View style={configureTrainingDayStyles.inputField}>
+                    <Text style={configureTrainingDayStyles.fieldLabel}>Peso (kg)</Text>
+                    <View style={configureTrainingDayStyles.inputGroup}>
+                      <TouchableOpacity
+                        style={[configureTrainingDayStyles.controlBtn, { left: 0 }]}
+                        onPress={() => {
+                          const currentValue = parseInt(set.weight) || 0;
+                          const newValue = Math.max(0, currentValue - 1);
+                          updateExerciseDetail(exerciseIndex, setIndex, "weight", newValue.toString());
+                        }}
+                      >
+                        <Text style={configureTrainingDayStyles.controlBtnText}>−</Text>
+                      </TouchableOpacity>
+                      <TextInput
+                        style={configureTrainingDayStyles.setInput}
                         value={set.weight}
                         onChangeText={(text) =>
-                          updateExerciseDetail(
-                            exerciseIndex,
-                            setIndex,
-                            "weight",
-                            text
-                          )
+                          updateExerciseDetail(exerciseIndex, setIndex, "weight", text)
                         }
-                        placeholder="Peso"
+                        placeholder="0"
+                        placeholderTextColor="#a5a5a5"
+                        keyboardType="numeric"
                         testID={`input-weight-${exercise.name}-${setIndex}`}
                       />
-                      <NumberInput
+                      <TouchableOpacity
+                        style={[configureTrainingDayStyles.controlBtn, { right: 0 }]}
+                        onPress={() => {
+                          const currentValue = parseInt(set.weight) || 0;
+                          updateExerciseDetail(exerciseIndex, setIndex, "weight", (currentValue + 1).toString());
+                        }}
+                      >
+                        <Text style={configureTrainingDayStyles.controlBtnText}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <View style={configureTrainingDayStyles.inputField}>
+                    <Text style={configureTrainingDayStyles.fieldLabel}>RIR</Text>
+                    <View style={configureTrainingDayStyles.inputGroup}>
+                      <TouchableOpacity
+                        style={[configureTrainingDayStyles.controlBtn, { left: 0 }]}
+                        onPress={() => {
+                          const currentValue = parseInt(set.rir) || 0;
+                          const newValue = Math.max(0, currentValue - 1);
+                          updateExerciseDetail(exerciseIndex, setIndex, "rir", newValue.toString());
+                        }}
+                      >
+                        <Text style={configureTrainingDayStyles.controlBtnText}>−</Text>
+                      </TouchableOpacity>
+                      <TextInput
+                        style={configureTrainingDayStyles.setInput}
                         value={set.rir}
                         onChangeText={(text) =>
                           updateExerciseDetail(exerciseIndex, setIndex, "rir", text)
                         }
-                        placeholder="RIR"
+                        placeholder="0"
+                        placeholderTextColor="#a5a5a5"
+                        keyboardType="numeric"
                         testID={`input-rir-${exercise.name}-${setIndex}`}
                       />
-                    </View>
-                    
-                    <View style={styles.setRow}>
                       <TouchableOpacity
-                        style={[styles.rpButton, buttonsActive[`${exerciseIndex}-${setIndex}-RP`] ? styles.rpButtonActive : null]}
+                        style={[configureTrainingDayStyles.controlBtn, { right: 0 }]}
+                        onPress={() => {
+                          const currentValue = parseInt(set.rir) || 0;
+                          updateExerciseDetail(exerciseIndex, setIndex, "rir", (currentValue + 1).toString());
+                        }}
+                      >
+                        <Text style={configureTrainingDayStyles.controlBtnText}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Techniques Section */}
+                <View style={configureTrainingDayStyles.techniquesSection}>
+                  <View style={configureTrainingDayStyles.techniquesRow}>
+                    <Text style={configureTrainingDayStyles.sectionLabel}>Técnicas avanzadas</Text>
+                    <View style={configureTrainingDayStyles.techniqueButtons}>
+                      <TouchableOpacity
+                        style={[
+                          configureTrainingDayStyles.techniqueBtn,
+                          buttonsActive[`${exerciseIndex}-${setIndex}-RP`] && configureTrainingDayStyles.techniqueBtnActiveRp
+                        ]}
                         onPress={() => toggleButton(exerciseIndex, setIndex, "RP")}
                         testID={`button-rp-toggle-${exercise.name}-${setIndex}`}
                       >
-                        <Text style={styles.rpButtonText}>RP</Text>
+                        <Text style={configureTrainingDayStyles.techniqueBtnText}>RP</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
-                        style={[styles.rpButton, buttonsActive[`${exerciseIndex}-${setIndex}-DS`] ? styles.rpButtonActive : null]}
+                        style={[
+                          configureTrainingDayStyles.techniqueBtn,
+                          buttonsActive[`${exerciseIndex}-${setIndex}-DS`] && configureTrainingDayStyles.techniqueBtnActiveDs
+                        ]}
                         onPress={() => toggleButton(exerciseIndex, setIndex, "DS")}
                         testID={`button-ds-toggle-${exercise.name}-${setIndex}`}
                       >
-                        <Text style={styles.rpButtonText}>DS</Text>
+                        <Text style={configureTrainingDayStyles.techniqueBtnText}>DS</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
-                        style={[styles.rpButton, buttonsActive[`${exerciseIndex}-${setIndex}-P`] ? styles.rpButtonActive : null]}
+                        style={[
+                          configureTrainingDayStyles.techniqueBtn,
+                          buttonsActive[`${exerciseIndex}-${setIndex}-P`] && configureTrainingDayStyles.techniqueBtnActiveP
+                        ]}
                         onPress={() => toggleButton(exerciseIndex, setIndex, "P")}
                         testID={`button-p-toggle-${exercise.name}-${setIndex}`}
                       >
-                        <Text style={styles.rpButtonText}>P</Text>
+                        <Text style={configureTrainingDayStyles.techniqueBtnText}>P</Text>
                       </TouchableOpacity>
                     </View>
-                    
-                    {/* Rest-Pause Section */}
-                    {buttonsActive[`${exerciseIndex}-${setIndex}-RP`] && (
-                      <View>
-                        {set.rp?.map((rpDetail, rpIndex) => (
-                          <View key={rpIndex} style={styles.rpRow}>
-                            <NumberInput
-                              value={rpDetail.value}
-                              onChangeText={(text) =>
-                                updateExerciseDetail(exerciseIndex, setIndex, "rp", text, rpIndex)
-                              }
-                              placeholder={`RP ${rpIndex + 1}`}
-                              testID={`input-rp-${exercise.name}-${setIndex}-${rpIndex}`}
-                            />
-                            <Picker
-                              selectedValue={rpDetail.time}
-                              style={styles.timePicker}
-                              onValueChange={(itemValue) =>
-                                updateExerciseDetail(exerciseIndex, setIndex, "time", itemValue, rpIndex)
-                              }
-                              testID={`picker-rp-time-${exercise.name}-${setIndex}-${rpIndex}`}
-                            >
-                              {[5, 10, 15, 20, 25, 30].map((time) => (
-                                <Picker.Item key={time} label={`${time}"`} value={time} />
-                              ))}
-                            </Picker>
-                            {rpIndex === 0 ? (
-                              <TouchableOpacity
-                                style={styles.addButton}
-                                onPress={() => addField(exerciseIndex, setIndex, "RP")}
-                                testID={`button-add-rp-${exercise.name}-${setIndex}`}
-                              >
-                                <Ionicons name="add" size={24} color="#FFFFFF" />
-                              </TouchableOpacity>
-                            ) : (
-                              <TouchableOpacity
-                                style={styles.removeButton}
-                                onPress={() => removeField(exerciseIndex, setIndex, rpIndex, "RP")}
-                                testID={`button-remove-rp-${exercise.name}-${setIndex}-${rpIndex}`}
-                              >
-                                <Ionicons name="remove" size={24} color="#FFFFFF" />
-                              </TouchableOpacity>
-                            )}
-                          </View>
-                        ))}
-                      </View>
-                    )}
-                    
-                    {/* Drop Sets Section */}
-                    {buttonsActive[`${exerciseIndex}-${setIndex}-DS`] && (
-                      <View>
-                        {set.ds?.map((dsDetail, dsIndex) => (
-                          <View key={dsIndex} style={styles.dsRow}>
-                            <NumberInput
-                              value={dsDetail.reps}
-                              onChangeText={(text) =>
-                                updateExerciseDetail(exerciseIndex, setIndex, "dsReps", text, undefined, dsIndex)
-                              }
-                              placeholder={`DS Reps ${dsIndex + 1}`}
-                              testID={`input-ds-reps-${exercise.name}-${setIndex}-${dsIndex}`}
-                            />
-                            <NumberInput
-                              value={dsDetail.peso}
-                              onChangeText={(text) =>
-                                updateExerciseDetail(exerciseIndex, setIndex, "dsPeso", text, undefined, dsIndex)
-                              }
-                              placeholder={`DS Peso ${dsIndex + 1}`}
-                              testID={`input-ds-peso-${exercise.name}-${setIndex}-${dsIndex}`}
-                            />
-                            {dsIndex === 0 ? (
-                              <TouchableOpacity
-                                style={styles.addButton}
-                                onPress={() => addField(exerciseIndex, setIndex, "DS")}
-                                testID={`button-add-ds-${exercise.name}-${setIndex}`}
-                              >
-                                <Ionicons name="add" size={24} color="#FFFFFF" />
-                              </TouchableOpacity>
-                            ) : (
-                              <TouchableOpacity
-                                style={styles.removeButton}
-                                onPress={() => removeField(exerciseIndex, setIndex, dsIndex, "DS")}
-                                testID={`button-remove-ds-${exercise.name}-${setIndex}-${dsIndex}`}
-                              >
-                                <Ionicons name="remove" size={24} color="#FFFFFF" />
-                              </TouchableOpacity>
-                            )}
-                          </View>
-                        ))}
-                      </View>
-                    )}
-                    
-                    {/* Partials Section */}
-                    {buttonsActive[`${exerciseIndex}-${setIndex}-P`] && (
-                      <View style={styles.partialRow}>
-                        <NumberInput
-                          value={set.partials?.reps || ""}
-                          onChangeText={(text) =>
-                            updateExerciseDetail(exerciseIndex, setIndex, "partials", text)
-                          }
-                          placeholder="Partials Reps"
-                          testID={`input-partials-reps-${exercise.name}-${setIndex}`}
-                        />
-                      </View>
-                    )}
                   </View>
+                  {/* Rest Pause Configuration */}
+                  {buttonsActive[`${exerciseIndex}-${setIndex}-RP`] && (
+                    <View style={configureTrainingDayStyles.techniqueConfig}>
+                      <View style={configureTrainingDayStyles.configHeader}>
+                        <Text style={configureTrainingDayStyles.configLabel}>Configuración Rest Pause</Text>
+                        <View style={configureTrainingDayStyles.configActions}>
+                          <TouchableOpacity
+                            style={configureTrainingDayStyles.miniBtn}
+                            onPress={() => addField(exerciseIndex, setIndex, "RP")}
+                          >
+                            <Text style={configureTrainingDayStyles.miniBtnText}>+</Text>
+                          </TouchableOpacity>
+                          {set.rp && set.rp.length > 1 && (
+                            <TouchableOpacity
+                              style={configureTrainingDayStyles.miniBtn}
+                              onPress={() => removeField(exerciseIndex, setIndex, set.rp!.length - 1, "RP")}
+                            >
+                              <Text style={configureTrainingDayStyles.miniBtnText}>−</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </View>
+
+                      {set.rp?.map((rpDetail, rpIndex) => (
+                        <View key={rpIndex} style={configureTrainingDayStyles.rpSeries}>
+                          <Text style={configureTrainingDayStyles.rpSeriesLabel}>RP {rpIndex + 1}</Text>
+
+                          <View style={configureTrainingDayStyles.rpControls}>
+                            <View style={configureTrainingDayStyles.rpField}>
+                              <Text style={configureTrainingDayStyles.miniLabel}>Reps</Text>
+                              <View style={configureTrainingDayStyles.miniInputGroup}>
+                                <TouchableOpacity
+                                  style={[configureTrainingDayStyles.miniControlBtn, { left: 0 }]}
+                                  onPress={() => {
+                                    const currentValue = parseInt(rpDetail.value) || 0;
+                                    const newValue = Math.max(0, currentValue - 1);
+                                    updateExerciseDetail(exerciseIndex, setIndex, "rp", newValue.toString(), rpIndex);
+                                  }}
+                                >
+                                  <Text style={configureTrainingDayStyles.miniControlBtnText}>−</Text>
+                                </TouchableOpacity>
+                                <TextInput
+                                  style={configureTrainingDayStyles.miniInput}
+                                  value={rpDetail.value}
+                                  onChangeText={(text) =>
+                                    updateExerciseDetail(exerciseIndex, setIndex, "rp", text, rpIndex)
+                                  }
+                                  placeholder="0"
+                                  placeholderTextColor="#6b7280"
+                                  keyboardType="numeric"
+                                  testID={`input-rp-${exercise.name}-${setIndex}-${rpIndex}`}
+                                />
+                                <TouchableOpacity
+                                  style={[configureTrainingDayStyles.miniControlBtn, { right: 0 }]}
+                                  onPress={() => {
+                                    const currentValue = parseInt(rpDetail.value) || 0;
+                                    updateExerciseDetail(exerciseIndex, setIndex, "rp", (currentValue + 1).toString(), rpIndex);
+                                  }}
+                                >
+                                  <Text style={configureTrainingDayStyles.miniControlBtnText}>+</Text>
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+
+                            <View style={configureTrainingDayStyles.rpField}>
+                              <Text style={configureTrainingDayStyles.miniLabel}>Descanso (seg)</Text>
+                              <View style={configureTrainingDayStyles.miniInputGroup}>
+                                <TouchableOpacity
+                                  style={[configureTrainingDayStyles.miniControlBtn, { left: 0 }]}
+                                  onPress={() => {
+                                    const currentValue = parseInt(rpDetail.time.toString()) || 15;
+                                    const newValue = Math.max(5, currentValue - 5);
+                                    updateExerciseDetail(exerciseIndex, setIndex, "time", newValue, rpIndex);
+                                  }}
+                                >
+                                  <Text style={configureTrainingDayStyles.miniControlBtnText}>−</Text>
+                                </TouchableOpacity>
+                                <TextInput
+                                  style={configureTrainingDayStyles.miniInput}
+                                  value={rpDetail.time.toString()}
+                                  onChangeText={(text) =>
+                                    updateExerciseDetail(exerciseIndex, setIndex, "time", parseInt(text) || 15, rpIndex)
+                                  }
+                                  placeholder="15"
+                                  placeholderTextColor="#6b7280"
+                                  keyboardType="numeric"
+                                  testID={`input-rp-time-${exercise.name}-${setIndex}-${rpIndex}`}
+                                />
+                                <TouchableOpacity
+                                  style={[configureTrainingDayStyles.miniControlBtn, { right: 0 }]}
+                                  onPress={() => {
+                                    const currentValue = parseInt(rpDetail.time.toString()) || 15;
+                                    updateExerciseDetail(exerciseIndex, setIndex, "time", currentValue + 5, rpIndex);
+                                  }}
+                                >
+                                  <Text style={configureTrainingDayStyles.miniControlBtnText}>+</Text>
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Drop Set Configuration */}
+                  {buttonsActive[`${exerciseIndex}-${setIndex}-DS`] && (
+                    <View style={configureTrainingDayStyles.techniqueConfig}>
+                      <View style={configureTrainingDayStyles.configHeader}>
+                        <Text style={configureTrainingDayStyles.configLabel}>Configuración Drop Set</Text>
+                        <View style={configureTrainingDayStyles.configActions}>
+                          <TouchableOpacity
+                            style={configureTrainingDayStyles.miniBtn}
+                            onPress={() => addField(exerciseIndex, setIndex, "DS")}
+                          >
+                            <Text style={configureTrainingDayStyles.miniBtnText}>+</Text>
+                          </TouchableOpacity>
+                          {set.ds && set.ds.length > 1 && (
+                            <TouchableOpacity
+                              style={configureTrainingDayStyles.miniBtn}
+                              onPress={() => removeField(exerciseIndex, setIndex, set.ds!.length - 1, "DS")}
+                            >
+                              <Text style={configureTrainingDayStyles.miniBtnText}>−</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </View>
+
+                      {set.ds?.map((dsDetail, dsIndex) => (
+                        <View key={dsIndex} style={configureTrainingDayStyles.dsDrop}>
+                          <Text style={configureTrainingDayStyles.dsDropLabel}>Drop {dsIndex + 1}</Text>
+
+                          <View style={configureTrainingDayStyles.dsControls}>
+                            <View style={configureTrainingDayStyles.dsField}>
+                              <Text style={configureTrainingDayStyles.miniLabel}>Reps</Text>
+                              <View style={configureTrainingDayStyles.miniInputGroup}>
+                                <TouchableOpacity
+                                  style={[configureTrainingDayStyles.miniControlBtn, { left: 0 }]}
+                                  onPress={() => {
+                                    const currentValue = parseInt(dsDetail.reps) || 0;
+                                    const newValue = Math.max(0, currentValue - 1);
+                                    updateExerciseDetail(exerciseIndex, setIndex, "dsReps", newValue.toString(), undefined, dsIndex);
+                                  }}
+                                >
+                                  <Text style={configureTrainingDayStyles.miniControlBtnText}>−</Text>
+                                </TouchableOpacity>
+                                <TextInput
+                                  style={configureTrainingDayStyles.miniInput}
+                                  value={dsDetail.reps}
+                                  onChangeText={(text) =>
+                                    updateExerciseDetail(exerciseIndex, setIndex, "dsReps", text, undefined, dsIndex)
+                                  }
+                                  placeholder="0"
+                                  placeholderTextColor="#6b7280"
+                                  keyboardType="numeric"
+                                  testID={`input-ds-reps-${exercise.name}-${setIndex}-${dsIndex}`}
+                                />
+                                <TouchableOpacity
+                                  style={[configureTrainingDayStyles.miniControlBtn, { right: 0 }]}
+                                  onPress={() => {
+                                    const currentValue = parseInt(dsDetail.reps) || 0;
+                                    updateExerciseDetail(exerciseIndex, setIndex, "dsReps", (currentValue + 1).toString(), undefined, dsIndex);
+                                  }}
+                                >
+                                  <Text style={configureTrainingDayStyles.miniControlBtnText}>+</Text>
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+
+                            <View style={configureTrainingDayStyles.dsField}>
+                              <Text style={configureTrainingDayStyles.miniLabel}>Peso (kg)</Text>
+                              <View style={configureTrainingDayStyles.miniInputGroup}>
+                                <TouchableOpacity
+                                  style={[configureTrainingDayStyles.miniControlBtn, { left: 0 }]}
+                                  onPress={() => {
+                                    const currentValue = parseInt(dsDetail.peso) || 0;
+                                    const newValue = Math.max(0, currentValue - 1);
+                                    updateExerciseDetail(exerciseIndex, setIndex, "dsPeso", newValue.toString(), undefined, dsIndex);
+                                  }}
+                                >
+                                  <Text style={configureTrainingDayStyles.miniControlBtnText}>−</Text>
+                                </TouchableOpacity>
+                                <TextInput
+                                  style={configureTrainingDayStyles.miniInput}
+                                  value={dsDetail.peso}
+                                  onChangeText={(text) =>
+                                    updateExerciseDetail(exerciseIndex, setIndex, "dsPeso", text, undefined, dsIndex)
+                                  }
+                                  placeholder="0"
+                                  placeholderTextColor="#6b7280"
+                                  keyboardType="numeric"
+                                  testID={`input-ds-peso-${exercise.name}-${setIndex}-${dsIndex}`}
+                                />
+                                <TouchableOpacity
+                                  style={[configureTrainingDayStyles.miniControlBtn, { right: 0 }]}
+                                  onPress={() => {
+                                    const currentValue = parseInt(dsDetail.peso) || 0;
+                                    updateExerciseDetail(exerciseIndex, setIndex, "dsPeso", (currentValue + 1).toString(), undefined, dsIndex);
+                                  }}
+                                >
+                                  <Text style={configureTrainingDayStyles.miniControlBtnText}>+</Text>
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Partials Configuration */}
+                  {buttonsActive[`${exerciseIndex}-${setIndex}-P`] && (
+                    <View style={configureTrainingDayStyles.techniqueConfig}>
+                      <View style={configureTrainingDayStyles.configHeader}>
+                        <Text style={configureTrainingDayStyles.configLabel}>Configuración Partials</Text>
+                      </View>
+
+                      <View style={configureTrainingDayStyles.pControl}>
+                        <Text style={configureTrainingDayStyles.miniLabel}>Repeticiones parciales</Text>
+                        <View style={configureTrainingDayStyles.miniInputGroup}>
+                          <TouchableOpacity
+                            style={[configureTrainingDayStyles.miniControlBtn, { left: 0 }]}
+                            onPress={() => {
+                              const currentValue = parseInt(set.partials?.reps || "0") || 0;
+                              const newValue = Math.max(1, currentValue - 1);
+                              updateExerciseDetail(exerciseIndex, setIndex, "partials", newValue.toString());
+                            }}
+                          >
+                            <Text style={configureTrainingDayStyles.miniControlBtnText}>−</Text>
+                          </TouchableOpacity>
+                          <TextInput
+                            style={configureTrainingDayStyles.miniInput}
+                            value={set.partials?.reps || ""}
+                            onChangeText={(text) =>
+                              updateExerciseDetail(exerciseIndex, setIndex, "partials", text)
+                            }
+                            placeholder="5"
+                            placeholderTextColor="#6b7280"
+                            keyboardType="numeric"
+                            testID={`input-partials-reps-${exercise.name}-${setIndex}`}
+                          />
+                          <TouchableOpacity
+                            style={configureTrainingDayStyles.miniControlBtn}
+                            onPress={() => {
+                              const currentValue = parseInt(set.partials?.reps || "0") || 0;
+                              updateExerciseDetail(exerciseIndex, setIndex, "partials", (currentValue + 1).toString());
+                            }}
+                          >
+                            <Text style={configureTrainingDayStyles.miniControlBtnText}>+</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </View>
+                  )}
                 </View>
               </View>
             ))}
-            
-            <View style={styles.buttonRow}>
+
+            {/* Action Buttons per Exercise */}
+            <View style={configureTrainingDayStyles.actionButtons}>
               <TouchableOpacity
-                style={styles.addButton}
+                style={[configureTrainingDayStyles.actionBtn, configureTrainingDayStyles.actionBtnSecondary]}
+                onPress={() => removeSet(exerciseIndex)}
+                disabled={exercise.sets.length <= 1}
+                testID={`button-remove-set-${exercise.name}`}
+              >
+                <Text style={configureTrainingDayStyles.actionBtnText}>Eliminar serie</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[configureTrainingDayStyles.actionBtn, configureTrainingDayStyles.actionBtnPrimary]}
                 onPress={() => addSet(exerciseIndex)}
                 testID={`button-add-set-${exercise.name}`}
               >
-                <Ionicons name="add" size={24} color="#FFFFFF" />
+                <Text style={configureTrainingDayStyles.actionBtnText}>Agregar Serie</Text>
               </TouchableOpacity>
-              {exercise.sets.length > 1 && (
-                <TouchableOpacity
-                  style={styles.removeButton}
-                  onPress={() => removeSet(exerciseIndex)}
-                  testID={`button-remove-set-${exercise.name}`}
-                >
-                  <Ionicons name="remove" size={24} color="#FFFFFF" />
-                </TouchableOpacity>
-              )}
             </View>
           </View>
         ))}
-        
+
         <TouchableOpacity
-          style={[styles.button, !isSaveEnabled && styles.disabledButton]}
+          style={[configureTrainingDayStyles.button, !isSaveEnabled && configureTrainingDayStyles.disabledButton]}
           onPress={handleSave}
           disabled={!isSaveEnabled}
           testID="button-save"
         >
-          <Text style={styles.buttonText}>Guardar día de rutina</Text>
+          <Text style={configureTrainingDayStyles.buttonText}>Guardar día de rutina</Text>
         </TouchableOpacity>
+
+        {exercises && exercises.length > 0 && (
+          <TouchableOpacity
+            style={[configureTrainingDayStyles.button, configureTrainingDayStyles.startSessionButton]}
+            onPress={handleStartTrainingSession}
+            testID="button-start-session"
+          >
+            <Text style={configureTrainingDayStyles.buttonText}>
+              {activeSession ? '🏃‍♂️ Continuar entrenamiento' : '🚀 Iniciar entrenamiento'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </View>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: "transparent",
-  },
-  scrollViewContent: {
-    flexGrow: 1,
-  },
-  title: {
-    color: "#FFFFFF",
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-    marginTop: 20,
-  },
-  exerciseContainer: {
-    backgroundColor: "#1F2940",
-    borderRadius: 10,
-    padding: 20,
-    marginBottom: 20,
-  },
-  exerciseName: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    marginBottom: 10,
-  },
-  setRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-  },
-  setColumn: {
-    flexDirection: "column",
-    gap: 10,
-  },
-  setText: {
-    color: "#A5A5A5",
-    fontSize: 16,
-  },
-  rpRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 10,
-  },
-  dsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 10,
-  },
-  partialRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 10,
-  },
-  timePicker: {
-    width: 120,
-    color: "#FFFFFF",
-    backgroundColor: "#1F2940",
-    borderRadius: 5,
-  },
-  buttonRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 20,
-  },
-  addButton: {
-    backgroundColor: "#2979FF",
-    width: 40,
-    height: 40,
-    borderRadius: 50,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  removeButton: {
-    backgroundColor: "#2979FF",
-    width: 40,
-    height: 40,
-    borderRadius: 50,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  button: {
-    backgroundColor: "#2979FF",
-    paddingVertical: 15,
-    borderRadius: 10,
-    alignItems: "center",
-    marginTop: 20,
-  },
-  disabledButton: {
-    backgroundColor: "#A5A5A5",
-  },
-  buttonText: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  rpButton: {
-    backgroundColor: "#A5A5A5",
-    width: 40,
-    height: 40,
-    borderRadius: 50,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  rpButtonActive: {
-    backgroundColor: "#2979FF",
-  },
-  rpButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  loadingText: {
-    color: "#FFFFFF",
-    fontSize: 18,
-  },
-  emptyText: {
-    color: "#A5A5A5",
-    fontSize: 16,
-    textAlign: "center",
-    marginBottom: 20,
-  },
-});
 
 export default ConfigureTrainingDayScreen;
