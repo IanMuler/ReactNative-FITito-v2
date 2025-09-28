@@ -187,3 +187,4 @@ chore: tareas de mantenimiento
 
 Desarrollado con ❤️ siguiendo mejores prácticas de React Native y Clean
 Architecture.
+# ReactNative-FITito-v2
