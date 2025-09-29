@@ -1,277 +1,402 @@
-/* Training Session Hook - Based on original FITito project logic */
-
 import { useState, useEffect, useCallback } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { trainingSessionApi } from '../services/trainingSessionApi';
-import { useWeekSchedule } from '@/features/routines/hooks';
+import { useFocusEffect } from '@react-navigation/native';
+import Toast from 'react-native-toast-message';
+import { TrainingSessionAsyncStorage } from '../services/asyncStorageService';
 import { 
   TrainingSession, 
   CreateTrainingSessionRequest, 
-  UpdateProgressRequest, 
-  CompleteSessionRequest,
-  PerformedSet,
-  TrainingSessionUIState
+  UpdateSetProgressRequest,
+  SessionProgress,
+  TrainingSessionStatus 
 } from '../types';
 
-export const useTrainingSession = (profileId: number) => {
-  const queryClient = useQueryClient();
-  const { markDayCompleted } = useWeekSchedule();
-  
-  // UI state management
-  const [uiState, setUIState] = useState<TrainingSessionUIState>({
-    currentExerciseIndex: 0,
-    isLoading: false,
-    isSaving: false,
-    hasUnsavedChanges: false,
-    buttonsActive: {}
-  });
+export const useTrainingSession = (profileId?: number) => {
+  const [activeSession, setActiveSession] = useState<TrainingSession | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Get active training session
-  const { 
-    data: activeSession, 
-    isLoading, 
-    error,
-    refetch
-  } = useQuery({
-    queryKey: ['activeTrainingSession', profileId],
-    queryFn: () => trainingSessionApi.getActiveSession(profileId),
-    refetchInterval: 30000, // Refetch every 30 seconds to keep session alive
-    retry: 1
-  });
+  // Load active session when hook initializes or screen focuses
+  const loadActiveSession = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      if (!profileId) {
+        setActiveSession(null);
+        return;
+      }
+
+      const session = await TrainingSessionAsyncStorage.getActiveSession(profileId);
+      setActiveSession(session);
+
+      console.log('📱 [useTrainingSession] Loaded active session:', {
+        hasSession: !!session,
+        sessionId: session?.id,
+        profileId: session?.profile_id,
+        status: session?.status
+      });
+    } catch (err) {
+      console.error('❌ Error loading active session:', err);
+      setError('Failed to load active session');
+      setActiveSession(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [profileId]);
+
+  // Load session on hook mount
+  useEffect(() => {
+    loadActiveSession();
+  }, [loadActiveSession]);
+
+  // Reload session when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadActiveSession();
+    }, [loadActiveSession])
+  );
 
   // Create new training session
-  const createSessionMutation = useMutation({
-    mutationFn: trainingSessionApi.createSession,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['activeTrainingSession', profileId] });
-    }
-  });
+  const createSession = useCallback(async (request: CreateTrainingSessionRequest): Promise<TrainingSession> => {
+    try {
+      setIsLoading(true);
+      setError(null);
 
-  // Note: updateProgress removed - using local state instead
+      if (!profileId) {
+        throw new Error('No profile ID provided');
+      }
+
+      // Check if there's already an active session for this profile
+      const existingSession = await TrainingSessionAsyncStorage.getActiveSession(profileId);
+      if (existingSession && existingSession.status === 'active') {
+        throw new Error('Ya existe una sesión activa. Completa o cancela la sesión actual antes de crear una nueva.');
+      }
+
+      const newSession = await TrainingSessionAsyncStorage.createSession(request);
+      setActiveSession(newSession);
+
+      console.log('✅ [useTrainingSession] Created new session:', {
+        id: newSession.id,
+        routine_name: newSession.routine_name,
+        exercises_count: newSession.exercises.length
+      });
+
+      return newSession;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create training session';
+      console.error('❌ Error creating session:', errorMessage);
+      setError(errorMessage);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [profileId]);
+
+  // Update set progress
+  const updateSetProgress = useCallback(async (request: UpdateSetProgressRequest): Promise<void> => {
+    try {
+      setError(null);
+
+      if (!activeSession) {
+        throw new Error('No active session found');
+      }
+
+      if (!profileId) {
+        throw new Error('No profile ID provided');
+      }
+
+      const updatedSession = await TrainingSessionAsyncStorage.updateSetProgress(request, profileId);
+      setActiveSession(updatedSession);
+
+      console.log('✅ [useTrainingSession] Updated set progress:', {
+        exercise_id: request.exercise_id,
+        set_number: request.set_number
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update set progress';
+      console.error('❌ Error updating set progress:', errorMessage);
+      setError(errorMessage);
+      throw err;
+    }
+  }, [activeSession, profileId]);
+
+  // Move to next exercise
+  const moveToNextExercise = useCallback(async (): Promise<void> => {
+    try {
+      setError(null);
+
+      if (!activeSession) {
+        throw new Error('No active session found');
+      }
+
+      if (!profileId) {
+        throw new Error('No profile ID provided');
+      }
+
+      const updatedSession = await TrainingSessionAsyncStorage.moveToNextExercise(activeSession.id, profileId);
+      setActiveSession(updatedSession);
+
+      console.log('✅ [useTrainingSession] Moved to next exercise:', {
+        current_index: updatedSession.current_exercise_index
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to move to next exercise';
+      console.error('❌ Error moving to next exercise:', errorMessage);
+      setError(errorMessage);
+      throw err;
+    }
+  }, [activeSession, profileId]);
+
+  // Move to previous exercise
+  const moveToPreviousExercise = useCallback(async (): Promise<void> => {
+    try {
+      setError(null);
+
+      if (!activeSession) {
+        throw new Error('No active session found');
+      }
+
+      if (!profileId) {
+        throw new Error('No profile ID provided');
+      }
+
+      const updatedSession = await TrainingSessionAsyncStorage.moveToPreviousExercise(activeSession.id, profileId);
+      setActiveSession(updatedSession);
+
+      console.log('✅ [useTrainingSession] Moved to previous exercise:', {
+        current_index: updatedSession.current_exercise_index
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to move to previous exercise';
+      console.error('❌ Error moving to previous exercise:', errorMessage);
+      setError(errorMessage);
+      throw err;
+    }
+  }, [activeSession, profileId]);
 
   // Complete session
-  const completeSessionMutation = useMutation({
-    mutationFn: ({ sessionId, completionData }: { sessionId: number; completionData?: CompleteSessionRequest }) =>
-      trainingSessionApi.completeSession(sessionId, completionData),
-    onSuccess: () => {
-      // Invalidate training session queries
-      queryClient.invalidateQueries({ queryKey: ['activeTrainingSession', profileId] });
-      queryClient.invalidateQueries({ queryKey: ['workoutSessions', profileId] });
-      
-      // CRITICAL: Invalidate routine-weeks to update day completion status
-      queryClient.invalidateQueries({ queryKey: ['routine-weeks', profileId] });
-      
-      // Invalidate workout history queries to show completed sessions immediately
-      queryClient.invalidateQueries({ queryKey: ['workout-history'] });
+  const completeSession = useCallback(async (): Promise<void> => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      if (!activeSession) {
+        throw new Error('No active session found');
+      }
+
+      if (!profileId) {
+        throw new Error('No profile ID provided');
+      }
+
+      await TrainingSessionAsyncStorage.completeSession(activeSession.id, profileId);
+      setActiveSession(null);
+
+      Toast.show({
+        type: 'success',
+        text1: 'Sesión completada',
+        text2: '¡Excelente entrenamiento!',
+      });
+
+      console.log('✅ [useTrainingSession] Session completed:', {
+        id: activeSession.id,
+        routine_name: activeSession.routine_name
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to complete session';
+      console.error('❌ Error completing session:', errorMessage);
+      setError(errorMessage);
+
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: errorMessage,
+      });
+
+      throw err;
+    } finally {
+      setIsLoading(false);
     }
-  });
+  }, [activeSession, profileId]);
 
   // Cancel session
-  const cancelSessionMutation = useMutation({
-    mutationFn: trainingSessionApi.cancelSession,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['activeTrainingSession', profileId] });
-    }
-  });
-
-  // Initialize button states based on exercise configuration
-  const initializeButtonStates = useCallback((session: TrainingSession) => {
-    const buttonsActive: Record<string, boolean> = {};
-    
-    session.exercises.forEach((exercise, exerciseIndex) => {
-      exercise.planned_sets.forEach((set, setIndex) => {
-        if (set.rp && set.rp.length > 0) {
-          const keyRP = `${exerciseIndex}-${setIndex}-RP`;
-          buttonsActive[keyRP] = true;
-        }
-        if (set.ds && set.ds.length > 0) {
-          const keyDS = `${exerciseIndex}-${setIndex}-DS`;
-          buttonsActive[keyDS] = true;
-        }
-        if (set.partials) {
-          const keyP = `${exerciseIndex}-${setIndex}-P`;
-          buttonsActive[keyP] = true;
-        }
-      });
-    });
-    
-    setUIState(prev => ({ 
-      ...prev, 
-      buttonsActive,
-      currentExerciseIndex: session.current_exercise_index || 0
-    }));
-  }, []);
-
-  // Update UI state when session changes
-  useEffect(() => {
-    if (activeSession) {
-      initializeButtonStates(activeSession);
-    }
-  }, [activeSession, initializeButtonStates]);
-
-  // Create session wrapper
-  const createSession = useCallback(async (sessionData: CreateTrainingSessionRequest) => {
-    setUIState(prev => ({ ...prev, isLoading: true }));
+  const cancelSession = useCallback(async (): Promise<void> => {
     try {
-      await createSessionMutation.mutateAsync(sessionData);
-    } finally {
-      setUIState(prev => ({ ...prev, isLoading: false }));
-    }
-  }, [createSessionMutation]);
+      setIsLoading(true);
+      setError(null);
 
-  // updateProgress removed - components now use local state
+      if (!activeSession) {
+        throw new Error('No active session found');
+      }
 
-  // Complete session wrapper
-  const completeSession = useCallback(async (completionData?: CompleteSessionRequest) => {
-    console.log('🎯 [Hook] Starting completeSession:', {
-      hasActiveSession: !!activeSession,
-      activeSessionId: activeSession?.id,
-      activeSessionIdType: typeof activeSession?.id,
-      completionData
-    });
+      if (!profileId) {
+        throw new Error('No profile ID provided');
+      }
 
-    if (!activeSession) {
-      const error = 'No active session available to complete';
-      console.error('❌ [Hook] Complete session failed:', error);
-      throw new Error(error);
-    }
+      await TrainingSessionAsyncStorage.cancelSession(activeSession.id, profileId);
+      setActiveSession(null);
 
-    if (!activeSession.id) {
-      const error = `Active session has invalid ID: ${activeSession.id}`;
-      console.error('❌ [Hook] Complete session failed:', error);
-      throw new Error(error);
-    }
-    
-    setUIState(prev => ({ ...prev, isLoading: true }));
-    
-    try {
-      console.log('🚀 [Hook] Calling mutation with sessionId:', activeSession.id);
-      const result = await completeSessionMutation.mutateAsync({
-        sessionId: activeSession.id,
-        completionData
+      Toast.show({
+        type: 'info',
+        text1: 'Sesión cancelada',
+        text2: 'La sesión ha sido cancelada',
       });
-      console.log('✅ [Hook] Session completed successfully:', result);
-      
-      // Mark day as completed in routine schedule
-      if (activeSession.day_name) {
-        console.log('📅 [Hook] Marking day as completed:', activeSession.day_name);
-        await markDayCompleted(activeSession.day_name);
-        console.log('✅ [Hook] Day marked as completed successfully');
-      } else {
-        console.warn('⚠️ [Hook] No day_name found in activeSession, cannot mark day as completed');
-      }
-      
-      return result;
-    } catch (error) {
-      console.error('❌ [Hook] Complete session failed:', {
-        error,
-        message: error instanceof Error ? error.message : 'Unknown error',
-        activeSessionId: activeSession.id
+
+      console.log('✅ [useTrainingSession] Session cancelled:', {
+        id: activeSession.id,
+        routine_name: activeSession.routine_name
       });
-      throw error;
-    } finally {
-      setUIState(prev => ({ ...prev, isLoading: false }));
-    }
-  }, [activeSession, completeSessionMutation]);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to cancel session';
+      console.error('❌ Error cancelling session:', errorMessage);
+      setError(errorMessage);
 
-  // Cancel session wrapper
-  const cancelSession = useCallback(async () => {
-    if (!activeSession) return;
-    
-    setUIState(prev => ({ ...prev, isLoading: true }));
-    
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: errorMessage,
+      });
+
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [activeSession, profileId]);
+
+  // Pause session
+  const pauseSession = useCallback(async (): Promise<void> => {
     try {
-      await cancelSessionMutation.mutateAsync(activeSession.id);
-    } finally {
-      setUIState(prev => ({ ...prev, isLoading: false }));
+      setError(null);
+
+      if (!activeSession) {
+        throw new Error('No active session found');
+      }
+
+      if (!profileId) {
+        throw new Error('No profile ID provided');
+      }
+
+      const updatedSession = await TrainingSessionAsyncStorage.pauseSession(activeSession.id, profileId);
+      setActiveSession(updatedSession);
+
+      Toast.show({
+        type: 'info',
+        text1: 'Sesión pausada',
+      });
+
+      console.log('✅ [useTrainingSession] Session paused:', {
+        id: activeSession.id
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to pause session';
+      console.error('❌ Error pausing session:', errorMessage);
+      setError(errorMessage);
+      throw err;
     }
-  }, [activeSession, cancelSessionMutation]);
+  }, [activeSession, profileId]);
 
-  // Navigate between exercises
-  const setCurrentExerciseIndex = useCallback((index: number) => {
-    setUIState(prev => ({ ...prev, currentExerciseIndex: index }));
-    
-    // No backend update needed - using local state only
-  }, []);
+  // Resume session
+  const resumeSession = useCallback(async (): Promise<void> => {
+    try {
+      setError(null);
 
-  // Toggle advanced technique buttons
-  const toggleButton = useCallback((exerciseIndex: number, setIndex: number, type: 'RP' | 'DS' | 'P') => {
-    const key = `${exerciseIndex}-${setIndex}-${type}`;
-    
-    setUIState(prev => ({
-      ...prev,
-      buttonsActive: {
-        ...prev.buttonsActive,
-        [key]: !prev.buttonsActive[key]
-      },
-      hasUnsavedChanges: true
-    }));
-  }, []);
+      if (!activeSession) {
+        throw new Error('No active session found');
+      }
 
-  // Check if all required inputs are filled for current exercise
-  const isCurrentExerciseComplete = useCallback(() => {
-    if (!activeSession || !activeSession.exercises[uiState.currentExerciseIndex]) {
-      return false;
+      if (!profileId) {
+        throw new Error('No profile ID provided');
+      }
+
+      const updatedSession = await TrainingSessionAsyncStorage.resumeSession(activeSession.id, profileId);
+      setActiveSession(updatedSession);
+
+      Toast.show({
+        type: 'success',
+        text1: 'Sesión reanudada',
+      });
+
+      console.log('✅ [useTrainingSession] Session resumed:', {
+        id: activeSession.id
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to resume session';
+      console.error('❌ Error resuming session:', errorMessage);
+      setError(errorMessage);
+      throw err;
     }
+  }, [activeSession, profileId]);
+
+  // Calculate session progress
+  const getSessionProgress = useCallback((): SessionProgress | null => {
+    if (!activeSession) return null;
+
+    const totalExercises = activeSession.exercises.length;
+    const completedExercises = activeSession.exercises.filter(ex => ex.is_completed).length;
     
-    const currentExercise = activeSession.exercises[uiState.currentExerciseIndex];
-    
-    return currentExercise.planned_sets.every((plannedSet, setIndex) => {
-      const performedSet = currentExercise.performed_sets[setIndex];
-      
-      if (!performedSet || !performedSet.reps || !performedSet.weight || !performedSet.rir) {
-        return false;
-      }
-      
-      // Check advanced techniques if they're active
-      const rpKey = `${uiState.currentExerciseIndex}-${setIndex}-RP`;
-      const dsKey = `${uiState.currentExerciseIndex}-${setIndex}-DS`;
-      const pKey = `${uiState.currentExerciseIndex}-${setIndex}-P`;
-      
-      if (uiState.buttonsActive[rpKey] && (!performedSet.rp || performedSet.rp.length === 0)) {
-        return false;
-      }
-      
-      if (uiState.buttonsActive[dsKey] && (!performedSet.ds || performedSet.ds.length === 0)) {
-        return false;
-      }
-      
-      if (uiState.buttonsActive[pKey] && (!performedSet.partials || !performedSet.partials.reps)) {
-        return false;
-      }
-      
-      return true;
-    });
-  }, [activeSession, uiState.currentExerciseIndex, uiState.buttonsActive]);
+    const totalSets = activeSession.exercises.reduce((sum, ex) => sum + ex.sets_config.length, 0);
+    const completedSets = activeSession.exercises.reduce(
+      (sum, ex) => sum + ex.performed_sets.filter(set => set.is_completed).length, 
+      0
+    );
+
+    const sessionStart = new Date(activeSession.start_time);
+    const now = new Date();
+    const sessionDurationMinutes = Math.floor((now.getTime() - sessionStart.getTime()) / (1000 * 60));
+
+    return {
+      total_exercises: totalExercises,
+      completed_exercises: completedExercises,
+      current_exercise_index: activeSession.current_exercise_index,
+      total_sets: totalSets,
+      completed_sets: completedSets,
+      session_duration_minutes: sessionDurationMinutes,
+    };
+  }, [activeSession]);
+
+  // Get current exercise
+  const getCurrentExercise = useCallback(() => {
+    if (!activeSession || activeSession.exercises.length === 0) return null;
+    return activeSession.exercises[activeSession.current_exercise_index] || null;
+  }, [activeSession]);
+
+  // Check if session can move to next exercise
+  const canMoveToNext = useCallback(() => {
+    if (!activeSession) return false;
+    return activeSession.current_exercise_index < activeSession.exercises.length - 1;
+  }, [activeSession]);
+
+  // Check if session can move to previous exercise
+  const canMoveToPrevious = useCallback(() => {
+    if (!activeSession) return false;
+    return activeSession.current_exercise_index > 0;
+  }, [activeSession]);
 
   return {
-    // Data
+    // State
     activeSession,
-    isLoading: isLoading || uiState.isLoading,
-    isSaving: uiState.isSaving,
+    isLoading,
     error,
-    
-    // UI State
-    currentExerciseIndex: uiState.currentExerciseIndex,
-    hasUnsavedChanges: uiState.hasUnsavedChanges,
-    buttonsActive: uiState.buttonsActive,
     
     // Actions
     createSession,
+    updateSetProgress,
+    moveToNextExercise,
+    moveToPreviousExercise,
     completeSession,
     cancelSession,
-    refetch,
+    pauseSession,
+    resumeSession,
+    loadActiveSession,
     
-    // Navigation
-    setCurrentExerciseIndex,
-    toggleButton,
+    // Computed values
+    getSessionProgress,
+    getCurrentExercise,
+    canMoveToNext,
+    canMoveToPrevious,
     
-    // Validation
-    isCurrentExerciseComplete,
-    
-    // Mutation states
-    isCreating: createSessionMutation.isPending,
-    isCompleting: completeSessionMutation.isPending,
-    isCancelling: cancelSessionMutation.isPending
+    // Helpers
+    hasActiveSession: !!activeSession,
+    isSessionActive: activeSession?.status === 'active',
+    isSessionPaused: activeSession?.status === 'paused',
   };
 };

@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import Toast from 'react-native-toast-message';
 import { RadialGradientBackground } from '@/components';
@@ -7,301 +7,181 @@ import NumberInput from '@/components/ui/NumberInput';
 import { useProfile } from '@/features/profile';
 import { ProfileSwitch } from '@/features/profile/components';
 import { useTrainingSession } from '@/features/training-sessions/hooks/useTrainingSession';
-import { LocalTrainingProgress, LocalSetProgress, LocalExerciseProgress, MultiProfileTrainingProgress } from '@/features/training-sessions/types';
+import { UpdateSetProgressRequest } from '@/features/training-sessions/types';
 
 export default function SesionEntrenoPage() {
   const router = useRouter();
   const { profileId } = useProfile();
-  
-  /* State - Multi-profile aware */
+
+  /* State */
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
-  const [multiProfileProgress, setMultiProfileProgress] = useState<MultiProfileTrainingProgress>({
-    progressByProfile: {},
-    currentProfileId: profileId
-  });
-
-  // Helper function to get current profile's progress
-  const getCurrentProfileProgress = (): LocalTrainingProgress => {
-    return multiProfileProgress.progressByProfile[profileId] || {
-      exerciseProgress: {},
-      currentExerciseIndex: 0,
-      hasUnsavedChanges: false
-    };
-  };
-
-  // Helper function to update current profile's progress
-  const updateCurrentProfileProgress = (updater: (prev: LocalTrainingProgress) => LocalTrainingProgress) => {
-    setMultiProfileProgress(prev => ({
-      ...prev,
-      progressByProfile: {
-        ...prev.progressByProfile,
-        [profileId]: updater(getCurrentProfileProgress())
-      },
-      currentProfileId: profileId
-    }));
-  };
-
-  // Helper function to update current exercise index for current profile
-  const updateCurrentExerciseIndex = (newIndex: number) => {
-    setCurrentExerciseIndex(newIndex);
-    updateCurrentProfileProgress(prev => ({
-      ...prev,
-      currentExerciseIndex: newIndex
-    }));
-  };
+  const [sessionInputs, setSessionInputs] = useState<{[key: string]: string}>({});
+  const [hasCheckedSession, setHasCheckedSession] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   /* Training Session Hook */
   const {
     activeSession,
-    isLoading,
-    error,
+    updateSetProgress,
+    moveToNextExercise,
+    moveToPreviousExercise,
     completeSession,
     cancelSession,
-    refetch,
+    getCurrentExercise,
+    canMoveToNext,
+    canMoveToPrevious,
+    isLoading,
   } = useTrainingSession(profileId);
 
-  /* Effects */
+  /* Redirect if no active session (with debounce to avoid race condition) */
   useEffect(() => {
-    if (error) {
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: 'No se pudo cargar la sesión de entrenamiento',
-      });
-    }
-  }, [error]);
-
-  /* Update exercise index when session changes */
-  useEffect(() => {
-    if (activeSession && activeSession.exercises) {
-      const maxIndex = activeSession.exercises.length - 1;
-      const currentProgress = getCurrentProfileProgress();
-      if (currentProgress.currentExerciseIndex > maxIndex) {
-        updateCurrentProfileProgress(prev => ({
-          ...prev,
-          currentExerciseIndex: Math.max(0, maxIndex)
-        }));
-        updateCurrentExerciseIndex(Math.max(0, maxIndex));
-      } else {
-        updateCurrentExerciseIndex(currentProgress.currentExerciseIndex);
+    if (!isLoading) {
+      if (!activeSession && !hasCheckedSession) {
+        setHasCheckedSession(true);
+        const timeout = setTimeout(() => {
+          if (!activeSession) {
+            console.log('⚠️ No active session found, redirecting...');
+            Toast.show({
+              type: 'info',
+              text1: 'No hay sesión activa',
+              text2: 'Regresando a rutina...',
+            });
+            router.replace('/rutina');
+          }
+        }, 100);
+        return () => clearTimeout(timeout);
       }
     }
-  }, [activeSession, profileId]);
+  }, [activeSession, isLoading, router, hasCheckedSession]);
 
-  /* Initialize local progress when session loads */
+  /* Update current exercise index when session changes */
   useEffect(() => {
     if (activeSession) {
-      console.log('🏋️ [SESSION] Initializing progress for profile:', {
-        profileId,
-        sessionId: activeSession.id,
-        routineName: activeSession.routine_name,
-        exerciseCount: activeSession.exercises.length
-      });
-
-      // Check if we already have progress for this profile
-      const existingProgress = getCurrentProfileProgress();
-      if (Object.keys(existingProgress.exerciseProgress).length > 0) {
-        console.log('📊 [SESSION] Using existing progress for profile:', profileId);
-        setCurrentExerciseIndex(existingProgress.currentExerciseIndex);
-        return;
-      }
-
-      const initialProgress: LocalTrainingProgress = {
-        exerciseProgress: {},
-        currentExerciseIndex: 0,
-        hasUnsavedChanges: false
-      };
-      
-      // Initialize progress for each exercise
-      activeSession.exercises.forEach((exercise, exerciseIndex) => {
-        console.log(`📋 [SESSION] Exercise ${exerciseIndex + 1}: ${exercise.exercise_name}`, {
-          exerciseId: exercise.exercise_id,
-          plannedSetsCount: exercise.planned_sets.length,
-          plannedSets: exercise.planned_sets.map((set, setIndex) => ({
-            setNumber: setIndex + 1,
-            reps: set.reps,
-            weight: set.weight,
-            rir: set.rir
-          }))
-        });
-
-        const exerciseProgress = {
-          exercise_id: exercise.exercise_id,
-          sets: exercise.planned_sets.map((plannedSet, setIndex) => {
-            const localSet = {
-              reps: plannedSet.reps ? String(plannedSet.reps) : '',
-              weight: plannedSet.weight ? String(plannedSet.weight) : '',
-              rir: plannedSet.rir ? String(plannedSet.rir) : '',
-              isCompleted: !!(plannedSet.reps && plannedSet.weight && plannedSet.reps > 0 && plannedSet.weight > 0)
-            };
-            
-            console.log(`✅ [SESSION] Set ${setIndex + 1} initialized:`, {
-              planned: { reps: plannedSet.reps, weight: plannedSet.weight, rir: plannedSet.rir },
-              local: { reps: localSet.reps, weight: localSet.weight, rir: localSet.rir, isCompleted: localSet.isCompleted }
-            });
-            
-            return localSet;
-          }),
-          isCompleted: false
-        };
-
-        initialProgress.exerciseProgress[exercise.exercise_id] = exerciseProgress;
-      });
-      
-      updateCurrentProfileProgress(() => initialProgress);
-      console.log('🎯 [SESSION] Local progress initialized for profile:', profileId);
+      setCurrentExerciseIndex(activeSession.current_exercise_index || 0);
     }
-  }, [activeSession, profileId]);
+  }, [activeSession]);
 
-  /* Local state update handler */
-  const updateLocalProgress = (
-    exerciseIndex: number,
-    setIndex: number,
-    key: string,
-    value: string | number
-  ) => {
-    if (!activeSession) return;
-    
-    const exercise = activeSession.exercises[exerciseIndex];
-    if (!exercise) return;
-
-    updateCurrentProfileProgress(prev => {
-      const updatedProgress = { ...prev };
-      const exerciseId = exercise.exercise_id;
-      
-      // Ensure exercise progress exists
-      if (!updatedProgress.exerciseProgress[exerciseId]) {
-        console.log(`🔧 [SESSION] Creating missing progress for exercise ${exerciseId}, using planned sets:`, 
-          exercise.planned_sets.map(set => ({ reps: set.reps, weight: set.weight, rir: set.rir }))
-        );
-        
-        updatedProgress.exerciseProgress[exerciseId] = {
-          exercise_id: exerciseId,
-          sets: exercise.planned_sets.map((plannedSet, index) => ({
-            reps: plannedSet.reps ? String(plannedSet.reps) : '',
-            weight: plannedSet.weight ? String(plannedSet.weight) : '',
-            rir: plannedSet.rir ? String(plannedSet.rir) : '',
-            isCompleted: !!(plannedSet.reps && plannedSet.weight && plannedSet.reps > 0 && plannedSet.weight > 0)
-          })),
-          isCompleted: false
-        };
-      }
-      
-      // Update the specific set field
-      const sets = [...updatedProgress.exerciseProgress[exerciseId].sets];
-      const currentSet = { ...sets[setIndex] };
-      
-      console.log(`📝 [SESSION] Updating set ${setIndex + 1} for exercise ${exerciseId}:`, {
-        field: key,
-        oldValue: currentSet[key as keyof typeof currentSet],
-        newValue: value,
-        currentSetBefore: { ...currentSet }
-      });
-
-      if (key === "reps") {
-        currentSet.reps = value as string;
-      } else if (key === "weight") {
-        currentSet.weight = value as string;
-      } else if (key === "rir") {
-        currentSet.rir = value as string;
-      }
-      
-      // Determine if set is completed
-      currentSet.isCompleted = Boolean(
-        currentSet.reps && 
-        currentSet.weight && 
-        !isNaN(parseFloat(currentSet.reps)) &&
-        !isNaN(parseFloat(currentSet.weight)) &&
-        parseFloat(currentSet.reps) > 0 && 
-        parseFloat(currentSet.weight) > 0
-      );
-      
-      sets[setIndex] = currentSet;
-      updatedProgress.exerciseProgress[exerciseId].sets = sets;
-      updatedProgress.hasUnsavedChanges = true;
-      
-      console.log(`📋 [LOCAL] Updated set progress: exercise ${exerciseId}, set ${setIndex + 1}, completed: ${currentSet.isCompleted}`, currentSet);
-      
-      return updatedProgress;
-    });
+  /* Handlers */
+  const handleCancelSession = () => {
+    Alert.alert(
+      'Cancelar sesión',
+      '¿Estás seguro de que quieres cancelar la sesión? Se perderá todo el progreso.',
+      [
+        {
+          text: 'No',
+          style: 'cancel',
+        },
+        {
+          text: 'Sí, cancelar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await cancelSession();
+              router.replace('/rutina');
+            } catch (error) {
+              console.error('Error cancelling session:', error);
+            }
+          },
+        },
+      ]
+    );
   };
 
-  const handleSave = async () => {
-    console.log('🎯 [Component] handleSave called:', {
-      hasActiveSession: !!activeSession,
-      activeSessionId: activeSession?.id,
-      activeSessionIdType: typeof activeSession?.id,
-      currentProfileProgress: getCurrentProfileProgress(),
-      fullActiveSession: activeSession
-    });
+  const handleCompleteSession = async () => {
+    Alert.alert(
+      'Finalizar sesión',
+      '¿Quieres finalizar la sesión de entrenamiento?',
+      [
+        {
+          text: 'Continuar entrenando',
+          style: 'cancel',
+        },
+        {
+          text: 'Finalizar',
+          style: 'default',
+          onPress: async () => {
+            try {
+              setIsSaving(true);
 
-    if (!activeSession) {
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: 'No hay sesión activa para completar',
-      });
-      return;
-    }
+              // Save all performed sets from session inputs
+              if (activeSession) {
+                for (const exercise of activeSession.exercises) {
+                  for (let setIndex = 0; setIndex < exercise.sets_config.length; setIndex++) {
+                    const setNumber = setIndex + 1;
+                    const repsKey = `reps_${exercise.exercise_id}_${setNumber}`;
+                    const weightKey = `weight_${exercise.exercise_id}_${setNumber}`;
+                    const rirKey = `rir_${exercise.exercise_id}_${setNumber}`;
 
-    try {
-      // Convert local progress to API format
-      const progressData = [];
-      
-      for (const [exerciseIdStr, exerciseProgress] of Object.entries(getCurrentProfileProgress().exerciseProgress)) {
-        const exerciseId = parseInt(exerciseIdStr, 10);
-        
-        exerciseProgress.sets.forEach((setProgress, setIndex) => {
-          if (setProgress.isCompleted) {
-            const repsValue = setProgress.reps && !isNaN(parseInt(setProgress.reps, 10)) ? parseInt(setProgress.reps, 10) : undefined;
-            const weightValue = setProgress.weight && !isNaN(parseFloat(setProgress.weight)) ? parseFloat(setProgress.weight) : undefined;
-            const rirValue = setProgress.rir && !isNaN(parseInt(setProgress.rir, 10)) ? parseInt(setProgress.rir, 10) : undefined;
-            
-            progressData.push({
-              exercise_id: exerciseId,
-              set_number: setIndex + 1,
-              reps: repsValue,
-              weight: weightValue,
-              rir: rirValue,
-              rest_pause_details: setProgress.rp,
-              drop_set_details: setProgress.ds,
-              partials_details: setProgress.partials,
-              is_completed: true
-            });
-          }
-        });
-      }
-      
-      console.log('🗺 [Component] Sending progress data:', progressData);
-      
-      const result = await completeSession({ progressData });
-      console.log('✅ [Component] Session completed successfully:', result);
-      
-      Toast.show({
-        type: 'success',
-        text1: 'Sesión completada',
-        text2: 'Tu entrenamiento ha sido guardado',
-      });
-      router.push('/(tabs)/rutina');
-    } catch (error) {
-      console.error('❌ [Component] handleSave failed:', {
-        error,
-        message: error instanceof Error ? error.message : 'Unknown error',
-        activeSessionId: activeSession?.id
-      });
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: `No se pudo completar la sesión: ${error instanceof Error ? error.message : 'Error desconocido'}`,
-      });
+                    const reps = parseInt(sessionInputs[repsKey] || '0');
+                    const weight = parseFloat(sessionInputs[weightKey] || '0');
+                    const rir = parseInt(sessionInputs[rirKey] || '0');
+
+                    // Only save sets that have data
+                    if (reps > 0 || weight > 0) {
+                      const updateRequest: UpdateSetProgressRequest = {
+                        session_id: activeSession.id,
+                        exercise_id: exercise.exercise_id,
+                        set_number: setNumber,
+                        reps,
+                        weight,
+                        rir,
+                      };
+
+                      await updateSetProgress(updateRequest);
+                    }
+                  }
+                }
+              }
+
+              await completeSession();
+              Toast.show({
+                type: 'success',
+                text1: 'Sesión completada',
+                text2: '¡Excelente entrenamiento!',
+              });
+              router.replace('/rutina');
+            } catch (error) {
+              console.error('Error completing session:', error);
+              Toast.show({
+                type: 'error',
+                text1: 'Error',
+                text2: 'No se pudo completar la sesión',
+              });
+            } finally {
+              setIsSaving(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const updateSetInput = (key: string, value: string) => {
+    setSessionInputs(prev => ({
+      ...prev,
+      [key]: value,
+    }));
+  };
+
+  const handlePreviousExercise = async () => {
+    if (canMoveToPrevious()) {
+      await moveToPreviousExercise();
+      setCurrentExerciseIndex(prev => Math.max(0, prev - 1));
     }
   };
 
-  // Get current exercise from active session
-  const currentExercise = activeSession?.exercises[currentExerciseIndex];
+  const handleNextExercise = async () => {
+    if (canMoveToNext()) {
+      await moveToNextExercise();
+      setCurrentExerciseIndex(prev => prev + 1);
+    }
+  };
+
+  /* Get current exercise */
+  const currentExercise = getCurrentExercise();
 
   /* Conditional rendering */
-  if (isLoading) {
+  if (isLoading || !activeSession) {
     return (
       <View style={styles.container}>
         <RadialGradientBackground />
@@ -313,191 +193,138 @@ export default function SesionEntrenoPage() {
     );
   }
 
-  if (error) {
+  if (!currentExercise) {
     return (
       <View style={styles.container}>
         <RadialGradientBackground />
         <ProfileSwitch />
         <View style={styles.centered}>
-          <Text style={styles.errorText}>Error al cargar la sesión</Text>
-          <Text style={styles.errorSubtext}>{error?.message}</Text>
+          <Text style={styles.noSessionTitle}>No hay ejercicios en esta sesión</Text>
+          <TouchableOpacity style={styles.button} onPress={() => router.back()}>
+            <Text style={styles.buttonText}>Regresar</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
   }
 
-  if (!activeSession) {
-    return (
-      <View style={styles.container}>
-        <RadialGradientBackground />
-        <ProfileSwitch />
-        <View style={styles.centered}>
-          <Text style={styles.noSessionTitle}>No hay sesión activa</Text>
-          <Text style={styles.noSessionText}>
-            Ve a la sección de rutinas para iniciar un entrenamiento
-          </Text>
-        </View>
-      </View>
-    );
-  }
-
-  /* Main render - following original project design */
+  /* Main render */
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
       <RadialGradientBackground />
       <ProfileSwitch />
-      <ScrollView contentContainerStyle={styles.scrollViewContent}>
-        {/* Header with training day name and date */}
+      <ScrollView
+        contentContainerStyle={styles.scrollViewContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Header */}
         <View style={styles.header}>
           <Text style={styles.dayText} testID="training-day-name">
             {activeSession.routine_name}
           </Text>
-          <Text style={styles.dateText}>{new Date().toLocaleDateString()}</Text>
+          <Text style={styles.dateText}>{activeSession.day_name} - {new Date().toLocaleDateString()}</Text>
         </View>
 
-        {/* Exercise Card - Following original design */}
-        {currentExercise && (
-          <View style={styles.exerciseCard}>
-            <Text style={styles.exerciseTitle}>EJERCICIO</Text>
-            <Text style={styles.exerciseName}>{currentExercise.exercise_name}</Text>
-            {currentExercise.exercise_image && (
-              <Image
-                source={{ uri: currentExercise.exercise_image }}
-                style={styles.exerciseImage}
-                testID={`exercise-image-${currentExercise.exercise_name}`}
-              />
-            )}
+        {/* Exercise Card */}
+        <View style={styles.exerciseCard}>
+          <Text style={styles.exerciseTitle}>EJERCICIO {currentExerciseIndex + 1} de {activeSession.exercises.length}</Text>
+          <Text style={styles.exerciseName}>{currentExercise.exercise_name}</Text>
+          {currentExercise.exercise_image && (
+            <Image
+              source={{ uri: currentExercise.exercise_image }}
+              style={styles.exerciseImage}
+              testID={`exercise-image-${currentExercise.exercise_name}`}
+            />
+          )}
 
-            {/* Sets Container */}
-            <View style={styles.setsContainer}>
-              {currentExercise.planned_sets.map((plannedSet, setIndex) => {
-                // Get performed set data from local progress
-                const exerciseProgress = getCurrentProfileProgress().exerciseProgress[currentExercise.exercise_id];
-                const performedSet = exerciseProgress?.sets[setIndex] || {
-                  reps: '',
-                  weight: '',
-                  rir: '',
-                  isCompleted: false
-                };
+          {/* Sets Container */}
+          <View style={styles.setsContainer}>
+            {currentExercise.sets_config.map((setConfig, setIndex) => {
+              const setNumber = setIndex + 1;
+              const repsKey = `reps_${currentExercise.exercise_id}_${setNumber}`;
+              const weightKey = `weight_${currentExercise.exercise_id}_${setNumber}`;
+              const rirKey = `rir_${currentExercise.exercise_id}_${setNumber}`;
 
-                return (
-                  <View key={setIndex} style={styles.setRow}>
-                    <Text style={styles.setText}>Set {setIndex + 1}</Text>
-                    <View style={{ flexDirection: "column", gap: 10, flex: 1 }}>
-                      {/* Basic inputs row */}
-                      <View style={{ flexDirection: "row", gap: 10 }}>
-                        <View style={{ flex: 1, gap: 5 }}>
-                          <Text style={styles.setDetailText}>Reps: {plannedSet.reps}</Text>
-                          <NumberInput
-                            value={performedSet.reps || ""}
-                            onChangeText={(text) =>
-                              updateLocalProgress(
-                                currentExerciseIndex,
-                                setIndex,
-                                "reps",
-                                text
-                              )
-                            }
-                            placeholder="Reps"
-                            defaultValue={plannedSet.reps}
-                            testID={`input-reps-${currentExercise.exercise_name}-${setIndex}`}
-                          />
-                        </View>
-                        <View style={{ flex: 1, gap: 5 }}>
-                          <Text style={styles.setDetailText}>Peso: {plannedSet.weight} kg</Text>
-                          <NumberInput
-                            value={performedSet.weight || ""}
-                            onChangeText={(text) =>
-                              updateLocalProgress(
-                                currentExerciseIndex,
-                                setIndex,
-                                "weight",
-                                text
-                              )
-                            }
-                            placeholder="Peso"
-                            defaultValue={plannedSet.weight}
-                            testID={`input-weight-${currentExercise.exercise_name}-${setIndex}`}
-                          />
-                        </View>
-                        <View style={{ flex: 1, gap: 5 }}>
-                          <Text style={styles.setDetailText}>RIR: {plannedSet.rir}</Text>
-                          <NumberInput
-                            value={performedSet.rir || ""}
-                            onChangeText={(text) =>
-                              updateLocalProgress(
-                                currentExerciseIndex,
-                                setIndex,
-                                "rir",
-                                text
-                              )
-                            }
-                            placeholder="RIR"
-                            defaultValue={plannedSet.rir}
-                            testID={`input-rir-${currentExercise.exercise_name}-${setIndex}`}
-                          />
-                        </View>
-                      </View>
-
-                      {/* Advanced techniques - simplified for now */}
-                      <View style={{ width: "60%", alignSelf: "center", gap: 5 }}>
-                        {plannedSet.partials && (
-                          <View style={{ flexDirection: "row", gap: 10 }}>
-                            <View style={{ flex: 1, gap: 5 }}>
-                              <Text style={styles.setDetailText}>Partials reps: {plannedSet.partials.reps}</Text>
-                              <NumberInput
-                                value={performedSet.partials?.reps || ""}
-                                onChangeText={(text) =>
-                                  updateLocalProgress(
-                                    currentExerciseIndex,
-                                    setIndex,
-                                    "partials",
-                                    text
-                                  )
-                                }
-                                placeholder="Partials Reps"
-                                defaultValue={plannedSet.partials.reps}
-                                testID={`input-partials-reps-${currentExercise.exercise_name}-${setIndex}`}
-                              />
-                            </View>
-                          </View>
-                        )}
-                      </View>
+              return (
+                <View key={setIndex} style={styles.setRow}>
+                  <Text style={styles.setText}>Set {setNumber}</Text>
+                  <View style={styles.setInputsContainer}>
+                    <View style={styles.inputColumn}>
+                      <Text style={styles.setDetailText}>Reps: {setConfig.reps}</Text>
+                      <NumberInput
+                        value={sessionInputs[repsKey] || ""}
+                        onChangeText={(text) => updateSetInput(repsKey, text)}
+                        placeholder="0"
+                        defaultValue={setConfig.reps}
+                        testID={`input-reps-${currentExercise.exercise_name}-${setIndex}`}
+                      />
+                    </View>
+                    <View style={styles.inputColumn}>
+                      <Text style={styles.setDetailText}>Peso: {setConfig.weight} kg</Text>
+                      <NumberInput
+                        value={sessionInputs[weightKey] || ""}
+                        onChangeText={(text) => updateSetInput(weightKey, text)}
+                        placeholder="0"
+                        defaultValue={setConfig.weight}
+                        testID={`input-weight-${currentExercise.exercise_name}-${setIndex}`}
+                      />
+                    </View>
+                    <View style={styles.inputColumn}>
+                      <Text style={styles.setDetailText}>RIR: {setConfig.rir}</Text>
+                      <NumberInput
+                        value={sessionInputs[rirKey] || ""}
+                        onChangeText={(text) => updateSetInput(rirKey, text)}
+                        placeholder="0"
+                        defaultValue={setConfig.rir}
+                        testID={`input-rir-${currentExercise.exercise_name}-${setIndex}`}
+                      />
                     </View>
                   </View>
-                );
-              })}
-            </View>
+                </View>
+              );
+            })}
           </View>
-        )}
+        </View>
 
-        {/* Navigation Buttons - Following original design */}
+        {/* Navigation Buttons */}
         <View style={styles.buttonsContainer}>
+          {/* Cancel Session Button - Circular and minimalist */}
+          <TouchableOpacity
+            style={styles.cancelSessionButton}
+            onPress={handleCancelSession}
+            testID="button-cancel-session"
+          >
+            <Text style={styles.cancelSessionButtonText}>🗑️</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={[
               styles.button,
-              { opacity: currentExerciseIndex === 0 ? 0.5 : 1 },
+              { opacity: !canMoveToPrevious() ? 0.5 : 1 },
             ]}
-            disabled={currentExerciseIndex === 0}
-            onPress={() =>
-              updateCurrentExerciseIndex((prevIndex) => Math.max(prevIndex - 1, 0))
-            }
+            disabled={!canMoveToPrevious()}
+            onPress={handlePreviousExercise}
             testID="button-previous"
           >
             <Text style={styles.buttonText}>Anterior</Text>
           </TouchableOpacity>
-          {currentExerciseIndex === (activeSession.exercises?.length || 1) - 1 ? (
-            <TouchableOpacity style={styles.button} onPress={handleSave} testID="button-finish">
+
+          {!canMoveToNext() ? (
+            <TouchableOpacity
+              style={styles.button}
+              onPress={handleCompleteSession}
+              testID="button-finish"
+            >
               <Text style={styles.buttonText}>Finalizar sesión</Text>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
               style={styles.button}
-              onPress={() =>
-                updateCurrentExerciseIndex((prevIndex) =>
-                  Math.min(prevIndex + 1, (activeSession.exercises?.length || 1) - 1)
-                )
-              }
+              onPress={handleNextExercise}
               testID="button-next"
             >
               <Text style={styles.buttonText}>Siguiente</Text>
@@ -505,7 +332,7 @@ export default function SesionEntrenoPage() {
           )}
         </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -517,6 +344,7 @@ const styles = StyleSheet.create({
   },
   scrollViewContent: {
     flexGrow: 1,
+    paddingBottom: 40,
   },
   header: {
     marginTop: 20,
@@ -554,28 +382,57 @@ const styles = StyleSheet.create({
     height: 80,
     width: 80,
     marginBottom: 20,
+    borderRadius: 10,
   },
   setsContainer: {
     width: "100%",
   },
   setRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 10,
+    flexDirection: "column",
+    alignItems: "stretch",
+    gap: 8,
+    marginBottom: 15,
   },
   setText: {
-    color: "#A5A5A5",
-    fontSize: 16,
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 10,
+  },
+  setInputsContainer: {
+    flexDirection: "row",
+    gap: 15,
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  inputColumn: {
+    flex: 1,
+    gap: 8,
+    minWidth: 90,
   },
   setDetailText: {
     color: "#A5A5A5",
-    fontSize: 16,
+    fontSize: 14,
     textAlign: "center",
   },
   buttonsContainer: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 15,
+  },
+  cancelSessionButton: {
+    width: 50,
+    height: 50,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelSessionButtonText: {
+    fontSize: 24,
+    opacity: 0.6,
   },
   button: {
     backgroundColor: "#2979FF",
@@ -583,7 +440,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
     flex: 1,
-    marginHorizontal: 5,
   },
   buttonText: {
     color: "#FFFFFF",
@@ -606,24 +462,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     textAlign: 'center',
-    marginBottom: 10,
-  },
-  noSessionText: {
-    color: '#B0BEC5',
-    fontSize: 16,
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  errorText: {
-    color: '#F44336',
-    fontSize: 18,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  errorSubtext: {
-    color: '#B0BEC5',
-    fontSize: 14,
-    textAlign: 'center',
+    marginBottom: 20,
   },
 });

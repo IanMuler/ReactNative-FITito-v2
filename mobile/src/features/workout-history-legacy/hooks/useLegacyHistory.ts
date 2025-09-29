@@ -1,10 +1,13 @@
 /* Legacy History Hook - Replicates original AsyncStorage behavior */
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { legacyHistoryApi } from '../services';
 import { HistoryEntry } from '../types';
+import { SessionHistoryApi } from '@/features/training-sessions/services/sessionHistoryApi';
+import Toast from 'react-native-toast-message';
 
 export const useLegacyHistory = (profileId: number, date: string) => {
+  const queryClient = useQueryClient();
 
   /* Request hook using TanStack Query */
   const {
@@ -30,6 +33,39 @@ export const useLegacyHistory = (profileId: number, date: string) => {
     }
   });
 
+  /* Delete today's history mutation */
+  const deleteTodayHistoryMutation = useMutation({
+    mutationFn: async (dateToDelete: string) => {
+      // Convert date format from DD/MM/YYYY to YYYY-MM-DD
+      const [day, month, year] = dateToDelete.split('/');
+      const formattedDate = `${year}-${month}-${day}`;
+
+      return SessionHistoryApi.deleteTodaySessionHistory(profileId, formattedDate);
+    },
+    onSuccess: () => {
+      // Invalidate history queries to refresh the data
+      queryClient.invalidateQueries({ queryKey: ['legacy-workout-history-v2'] });
+      queryClient.invalidateQueries({ queryKey: ['routine-weeks'] });
+
+      Toast.show({
+        type: 'success',
+        text1: 'Histórico borrado',
+        text2: 'El histórico de hoy ha sido eliminado correctamente',
+      });
+
+      console.log('✅ [LEGACY-HOOK] Today\'s history deleted successfully');
+    },
+    onError: (error: any) => {
+      Toast.show({
+        type: 'error',
+        text1: 'Error al borrar',
+        text2: error.message || 'No se pudo eliminar el histórico',
+      });
+
+      console.error('❌ [LEGACY-HOOK] Failed to delete today\'s history:', error.message);
+    }
+  });
+
   /* Derived data - mimics original filtering logic */
   const dayHistory = historyData.filter((entry: HistoryEntry) => entry.date === date);
 
@@ -38,12 +74,14 @@ export const useLegacyHistory = (profileId: number, date: string) => {
     dayHistory, // Add this for backward compatibility
     history: dayHistory,
     allHistory: historyData,
-    
+
     /* States */
     isLoading,
     error,
-    
+    isDeleting: deleteTodayHistoryMutation.isPending,
+
     /* Actions */
     refetch,
+    deleteTodayHistory: deleteTodayHistoryMutation.mutate,
   };
 };

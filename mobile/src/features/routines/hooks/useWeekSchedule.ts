@@ -288,7 +288,7 @@ export const useWeekSchedule = () => {
   /* Helper to convert day_of_week from routine_weeks format (0-6) to training_sessions format (1-7) */
   const convertDayOfWeekForTrainingSession = useCallback((routineWeekDayOfWeek: number): number => {
     // routine_weeks: Sunday=0, Monday=1, ..., Saturday=6
-    // training_sessions: Monday=1, Tuesday=2, ..., Sunday=7
+    // AsyncStorage training_sessions: Monday=1, Tuesday=2, ..., Sunday=7
     if (routineWeekDayOfWeek === 0) {
       return 7; // Sunday: 0 -> 7
     }

@@ -1,0 +1,725 @@
+🚀 FITito API Server running on http://localhost:3000
+📱 Mobile access: http://192.168.1.50:3000
+🏥 Health check: http://192.168.1.50:3000/health
+💪 Exercises API: http://192.168.1.50:3000/api/v1/exercises
+📅 Training Days API: http://192.168.1.50:3000/api/v1/training-days
+🏋️ Routines API: http://192.168.1.50:3000/api/v1/routines
+📆 Routine Weeks API: http://192.168.1.50:3000/api/v1/routine-weeks
+🏃 Workout Sessions API: http://192.168.1.50:3000/api/v1/workout-sessions
+🎯 Training Sessions API: http://192.168.1.50:3000/api/v1/training-sessions
+📚 Workout History (AsyncStorage format): http://192.168.1.50:3000/api/v1/workout-history/:profileId/:date
+📈 Session History API: http://192.168.1.50:3000/api/v1/session-history
+🚀 [2025-09-29T21:40:46.300Z] POST /api/v1/session-history
+📦 Request Body: {
+  "profile_id": 1,
+  "session_date": "2025-09-29",
+  "session_uuid": "test_session_12345",
+  "routine_name": "Rutina Push",
+  "day_name": "Lunes",
+  "status": "completed",
+  "start_time": "2025-09-29T18:00:00.000Z",
+  "end_time": "2025-09-29T19:30:00.000Z",
+  "duration_minutes": 90,
+  "session_data": {
+    "exercises": []
+  },
+  "total_exercises": 1,
+  "completed_exercises": 1,
+  "total_sets": 1,
+  "completed_sets": 1
+}
+📚 [SESSION-HISTORY] Creating/updating session history: {
+  profile_id: 1,
+  session_date: '2025-09-29',
+  session_uuid: 'test_session_12345',
+  routine_name: 'Rutina Push',
+  day_name: 'Lunes',
+  status: 'completed',
+  duration_minutes: 90,
+  total_exercises: 1,
+  completed_exercises: 1
+}
+✅ [SESSION-HISTORY] Session history saved successfully: {
+  id: 1,
+  profile_id: 1,
+  session_date: '2025-09-29',
+  status: 'completed'
+}
+✅ [2025-09-29T21:40:46.300Z] POST /api/v1/session-history - 200
+🚀 [2025-09-29T21:40:56.103Z] GET /api/v1/session-history?profile_id=1
+📚 [SESSION-HISTORY] Getting session history: { profile_id: 1, limit: 50, specific_date: undefined }
+✅ [SESSION-HISTORY] Retrieved session history: { profile_id: 1, count: 1, specific_date: 'all' }
+✅ [2025-09-29T21:40:56.103Z] GET /api/v1/session-history?profile_id=1 - 200
+🚀 [2025-09-29T21:41:00.311Z] GET /api/v1/session-history/1?profile_id=1
+📚 [SESSION-HISTORY] Getting specific session history: { id: 1, profile_id: 1 }
+✅ [SESSION-HISTORY] Retrieved specific session history: { id: 1, routine_name: 'Rutina Push', status: 'completed' }
+✅ [2025-09-29T21:41:00.311Z] GET /api/v1/session-history/1?profile_id=1 - 200
+🚀 [2025-09-29T22:24:00.255Z] GET /api/v1/training-sessions/active/2
+❌ [2025-09-29T22:24:00.255Z] GET /api/v1/training-sessions/active/2 - 404
+🚨 Error Response: {"success":false,"error":"Not Found","message":"Route /api/v1/training-sessions/active/2 not found"}
+🚀 [2025-09-29T22:24:01.319Z] GET /api/v1/training-sessions/active/2
+❌ [2025-09-29T22:24:01.319Z] GET /api/v1/training-sessions/active/2 - 404
+🚨 Error Response: {"success":false,"error":"Not Found","message":"Route /api/v1/training-sessions/active/2 not found"}
+🚀 [2025-09-29T22:24:19.438Z] GET /api/v1/routine-weeks?profile_id=1
+📅 Retrieved 7 routine weeks for profile 1
+✅ [2025-09-29T22:24:19.438Z] GET /api/v1/routine-weeks?profile_id=1 - 200
+🚀 [2025-09-29T22:24:19.563Z] GET /api/v1/routine-weeks/2/configuration?profile_id=1
+📋 Retrieved configuration for routine week 2: 6 exercises
+✅ [2025-09-29T22:24:19.563Z] GET /api/v1/routine-weeks/2/configuration?profile_id=1 - 200
+🚀 [2025-09-29T22:24:26.526Z] GET /api/v1/routine-weeks?profile_id=2
+📅 Retrieved 7 routine weeks for profile 2
+✅ [2025-09-29T22:24:26.526Z] GET /api/v1/routine-weeks?profile_id=2 - 200
+🚀 [2025-09-29T22:24:26.614Z] GET /api/v1/routine-weeks/9/configuration?profile_id=2
+📋 Retrieved configuration for routine week 9: 4 exercises
+✅ [2025-09-29T22:24:26.614Z] GET /api/v1/routine-weeks/9/configuration?profile_id=2 - 200
+🚀 [2025-09-29T22:27:58.621Z] GET /api/v1/routine-weeks?profile_id=1
+📅 Retrieved 7 routine weeks for profile 1
+✅ [2025-09-29T22:27:58.621Z] GET /api/v1/routine-weeks?profile_id=1 - 200
+🚀 [2025-09-29T22:27:58.723Z] GET /api/v1/routine-weeks/2/configuration?profile_id=1
+📋 Retrieved configuration for routine week 2: 6 exercises
+✅ [2025-09-29T22:27:58.723Z] GET /api/v1/routine-weeks/2/configuration?profile_id=1 - 200
+🚀 [2025-09-29T22:29:18.488Z] GET /api/v1/routine-weeks?profile_id=2
+📅 Retrieved 7 routine weeks for profile 2
+✅ [2025-09-29T22:29:18.488Z] GET /api/v1/routine-weeks?profile_id=2 - 200
+🚀 [2025-09-29T22:29:18.599Z] GET /api/v1/routine-weeks/9/configuration?profile_id=2
+📋 Retrieved configuration for routine week 9: 4 exercises
+✅ [2025-09-29T22:29:18.599Z] GET /api/v1/routine-weeks/9/configuration?profile_id=2 - 200
+🚀 [2025-09-29T22:29:24.473Z] POST /api/v1/session-history
+📦 Request Body: {
+  "profile_id": 1,
+  "session_date": "2025-09-29",
+  "session_uuid": "session_1759184669710_7piwd8p40",
+  "routine_name": "Piernas y laterales A",
+  "day_name": "Lunes",
+  "status": "cancelled",
+  "start_time": "2025-09-29T22:24:29.710Z",
+  "end_time": "2025-09-29T22:29:24.602Z",
+  "duration_minutes": 4,
+  "session_data": {
+    "exercises": [
+      {
+        "exercise_id": 38,
+        "exercise_name": "Prensa 45°",
+        "exercise_image": "file:///data/user/0/host.exp.exponent/cache/ImagePicker/75aa76db-0706-4b54-80be-d88ec331a2e7.png",
+        "order_in_session": 1,
+        "sets_config": [
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "8",
+            "weight": "40"
+          },
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "8",
+            "weight": "40"
+          }
+        ],
+        "performed_sets": [],
+        "is_completed": false
+      },
+      {
+        "exercise_id": 39,
+        "exercise_name": "Laterales polea 1 mano",
+        "exercise_image": "file:///data/user/0/host.exp.exponent/cache/ImagePicker/69ed74e4-492a-41be-a4a1-551a65db11f8.jpeg",
+        "order_in_session": 2,
+        "sets_config": [
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "15",
+            "weight": "7"
+          },
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "15",
+            "weight": "7"
+          }
+        ],
+        "performed_sets": [],
+        "is_completed": false
+      },
+      {
+        "exercise_id": 33,
+        "exercise_name": "Peso muerto maq belt",
+        "exercise_image": "file:///data/user/0/host.exp.exponent/cache/ImagePicker/72aa9d54-7b97-44f4-83ea-d6705bdd9196.jpeg",
+        "order_in_session": 3,
+        "sets_config": [
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "12",
+            "weight": "40"
+          },
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "12",
+            "weight": "40"
+          }
+        ],
+        "performed_sets": [],
+        "is_completed": false
+      },
+      {
+        "exercise_id": 18,
+        "exercise_name": "Elevaciones laterales de pie",
+        "exercise_image": "file:///data/user/0/host.exp.exponent/cache/ImagePicker/1b45a54b-d876-4d6d-b4f6-4495c999c3e7.png",
+        "order_in_session": 4,
+        "sets_config": [
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "15",
+            "weight": "5"
+          },
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "15",
+            "weight": "5"
+          }
+        ],
+        "performed_sets": [],
+        "is_completed": false
+      },
+      {
+        "exercise_id": 37,
+        "exercise_name": "Extensión de piernas en maq",
+        "exercise_image": "file:///data/user/0/host.exp.exponent/cache/ImagePicker/7b7e488b-a6ab-49d4-8248-24e9afe181c3.jpeg",
+        "order_in_session": 5,
+        "sets_config": [
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "12",
+            "weight": "35"
+          },
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "12",
+            "weight": "35"
+          }
+        ],
+        "performed_sets": [],
+        "is_completed": false
+      },
+      {
+        "exercise_id": 24,
+        "exercise_name": "Curl femoral acostado",
+        "exercise_image": "file:///data/user/0/host.exp.exponent/cache/ImagePicker/37294fa9-eed4-489f-b5b5-890431ffd118.png",
+        "order_in_session": 6,
+        "sets_config": [
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "12",
+            "weight": "40"
+          },
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "12",
+            "weight": "40"
+          }
+        ],
+        "performed_sets": [],
+        "is_completed": false
+      }
+    ],
+    "total_exercises": 6,
+    "completed_exercises": 0,
+    "total_sets": 12,
+    "completed_sets": 0
+  },
+  "total_exercises": 6,
+  "completed_exercises": 0,
+  "total_sets": 12,
+  "completed_sets": 0
+}
+📚 [SESSION-HISTORY] Creating/updating session history: {
+  profile_id: 1,
+  session_date: '2025-09-29',
+  session_uuid: 'session_1759184669710_7piwd8p40',
+  routine_name: 'Piernas y laterales A',
+  day_name: 'Lunes',
+  status: 'cancelled',
+  duration_minutes: 4,
+  total_exercises: 6,
+  completed_exercises: 0
+}
+✅ [SESSION-HISTORY] Session history saved successfully: {
+  id: 1,
+  profile_id: 1,
+  session_date: '2025-09-29',
+  status: 'cancelled'
+}
+✅ [2025-09-29T22:29:24.473Z] POST /api/v1/session-history - 200
+🚀 [2025-09-29T22:29:30.061Z] POST /api/v1/session-history
+📦 Request Body: {
+  "profile_id": 1,
+  "session_date": "2025-09-29",
+  "session_uuid": "session_1759184965616_vx0409kjt",
+  "routine_name": "Piernas y laterales A",
+  "day_name": "Lunes",
+  "status": "cancelled",
+  "start_time": "2025-09-29T22:29:25.616Z",
+  "end_time": "2025-09-29T22:29:30.194Z",
+  "duration_minutes": 0,
+  "session_data": {
+    "exercises": [
+      {
+        "exercise_id": 38,
+        "exercise_name": "Prensa 45°",
+        "exercise_image": "file:///data/user/0/host.exp.exponent/cache/ImagePicker/75aa76db-0706-4b54-80be-d88ec331a2e7.png",
+        "order_in_session": 1,
+        "sets_config": [
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "8",
+            "weight": "40"
+          },
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "8",
+            "weight": "40"
+          }
+        ],
+        "performed_sets": [],
+        "is_completed": false
+      },
+      {
+        "exercise_id": 39,
+        "exercise_name": "Laterales polea 1 mano",
+        "exercise_image": "file:///data/user/0/host.exp.exponent/cache/ImagePicker/69ed74e4-492a-41be-a4a1-551a65db11f8.jpeg",
+        "order_in_session": 2,
+        "sets_config": [
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "15",
+            "weight": "7"
+          },
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "15",
+            "weight": "7"
+          }
+        ],
+        "performed_sets": [],
+        "is_completed": false
+      },
+      {
+        "exercise_id": 33,
+        "exercise_name": "Peso muerto maq belt",
+        "exercise_image": "file:///data/user/0/host.exp.exponent/cache/ImagePicker/72aa9d54-7b97-44f4-83ea-d6705bdd9196.jpeg",
+        "order_in_session": 3,
+        "sets_config": [
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "12",
+            "weight": "40"
+          },
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "12",
+            "weight": "40"
+          }
+        ],
+        "performed_sets": [],
+        "is_completed": false
+      },
+      {
+        "exercise_id": 18,
+        "exercise_name": "Elevaciones laterales de pie",
+        "exercise_image": "file:///data/user/0/host.exp.exponent/cache/ImagePicker/1b45a54b-d876-4d6d-b4f6-4495c999c3e7.png",
+        "order_in_session": 4,
+        "sets_config": [
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "15",
+            "weight": "5"
+          },
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "15",
+            "weight": "5"
+          }
+        ],
+        "performed_sets": [],
+        "is_completed": false
+      },
+      {
+        "exercise_id": 37,
+        "exercise_name": "Extensión de piernas en maq",
+        "exercise_image": "file:///data/user/0/host.exp.exponent/cache/ImagePicker/7b7e488b-a6ab-49d4-8248-24e9afe181c3.jpeg",
+        "order_in_session": 5,
+        "sets_config": [
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "12",
+            "weight": "35"
+          },
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "12",
+            "weight": "35"
+          }
+        ],
+        "performed_sets": [],
+        "is_completed": false
+      },
+      {
+        "exercise_id": 24,
+        "exercise_name": "Curl femoral acostado",
+        "exercise_image": "file:///data/user/0/host.exp.exponent/cache/ImagePicker/37294fa9-eed4-489f-b5b5-890431ffd118.png",
+        "order_in_session": 6,
+        "sets_config": [
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "12",
+            "weight": "40"
+          },
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "12",
+            "weight": "40"
+          }
+        ],
+        "performed_sets": [],
+        "is_completed": false
+      }
+    ],
+    "total_exercises": 6,
+    "completed_exercises": 0,
+    "total_sets": 12,
+    "completed_sets": 0
+  },
+  "total_exercises": 6,
+  "completed_exercises": 0,
+  "total_sets": 12,
+  "completed_sets": 0
+}
+📚 [SESSION-HISTORY] Creating/updating session history: {
+  profile_id: 1,
+  session_date: '2025-09-29',
+  session_uuid: 'session_1759184965616_vx0409kjt',
+  routine_name: 'Piernas y laterales A',
+  day_name: 'Lunes',
+  status: 'cancelled',
+  duration_minutes: 0,
+  total_exercises: 6,
+  completed_exercises: 0
+}
+❌ [SESSION-HISTORY] Error saving session history: new row for relation "session_history" violates check constraint "session_history_duration_minutes_check"
+❌ [2025-09-29T22:29:30.061Z] POST /api/v1/session-history - 500
+🚨 Error Response: {"success":false,"error":"Internal server error","message":"new row for relation \"session_history\" violates check constraint \"session_history_duration_minutes_check\""}
+🚀 [2025-09-29T22:30:00.539Z] GET /api/v1/exercises
+✅ [2025-09-29T22:30:00.539Z] GET /api/v1/exercises - 200
+🚀 [2025-09-29T22:30:01.432Z] GET /api/v1/exercises
+✅ [2025-09-29T22:30:01.432Z] GET /api/v1/exercises - 200
+🚀 [2025-09-29T22:30:14.283Z] POST /api/v1/session-history
+📦 Request Body: {
+  "profile_id": 1,
+  "session_date": "2025-09-29",
+  "session_uuid": "session_1759184973731_vekaknl34",
+  "routine_name": "Piernas y laterales A",
+  "day_name": "Lunes",
+  "status": "cancelled",
+  "start_time": "2025-09-29T22:29:33.731Z",
+  "end_time": "2025-09-29T22:30:14.459Z",
+  "duration_minutes": 0,
+  "session_data": {
+    "exercises": [
+      {
+        "exercise_id": 38,
+        "exercise_name": "Prensa 45°",
+        "exercise_image": "file:///data/user/0/host.exp.exponent/cache/ImagePicker/75aa76db-0706-4b54-80be-d88ec331a2e7.png",
+        "order_in_session": 1,
+        "sets_config": [
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "8",
+            "weight": "40"
+          },
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "8",
+            "weight": "40"
+          }
+        ],
+        "performed_sets": [],
+        "is_completed": false
+      },
+      {
+        "exercise_id": 39,
+        "exercise_name": "Laterales polea 1 mano",
+        "exercise_image": "file:///data/user/0/host.exp.exponent/cache/ImagePicker/69ed74e4-492a-41be-a4a1-551a65db11f8.jpeg",
+        "order_in_session": 2,
+        "sets_config": [
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "15",
+            "weight": "7"
+          },
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "15",
+            "weight": "7"
+          }
+        ],
+        "performed_sets": [],
+        "is_completed": false
+      },
+      {
+        "exercise_id": 33,
+        "exercise_name": "Peso muerto maq belt",
+        "exercise_image": "file:///data/user/0/host.exp.exponent/cache/ImagePicker/72aa9d54-7b97-44f4-83ea-d6705bdd9196.jpeg",
+        "order_in_session": 3,
+        "sets_config": [
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "12",
+            "weight": "40"
+          },
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "12",
+            "weight": "40"
+          }
+        ],
+        "performed_sets": [],
+        "is_completed": false
+      },
+      {
+        "exercise_id": 18,
+        "exercise_name": "Elevaciones laterales de pie",
+        "exercise_image": "file:///data/user/0/host.exp.exponent/cache/ImagePicker/1b45a54b-d876-4d6d-b4f6-4495c999c3e7.png",
+        "order_in_session": 4,
+        "sets_config": [
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "15",
+            "weight": "5"
+          },
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "15",
+            "weight": "5"
+          }
+        ],
+        "performed_sets": [],
+        "is_completed": false
+      },
+      {
+        "exercise_id": 37,
+        "exercise_name": "Extensión de piernas en maq",
+        "exercise_image": "file:///data/user/0/host.exp.exponent/cache/ImagePicker/7b7e488b-a6ab-49d4-8248-24e9afe181c3.jpeg",
+        "order_in_session": 5,
+        "sets_config": [
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "12",
+            "weight": "35"
+          },
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "12",
+            "weight": "35"
+          }
+        ],
+        "performed_sets": [],
+        "is_completed": false
+      },
+      {
+        "exercise_id": 24,
+        "exercise_name": "Curl femoral acostado",
+        "exercise_image": "file:///data/user/0/host.exp.exponent/cache/ImagePicker/37294fa9-eed4-489f-b5b5-890431ffd118.png",
+        "order_in_session": 6,
+        "sets_config": [
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "12",
+            "weight": "40"
+          },
+          {
+            "ds": [],
+            "rp": [],
+            "rir": "5",
+            "reps": "12",
+            "weight": "40"
+          }
+        ],
+        "performed_sets": [],
+        "is_completed": false
+      }
+    ],
+    "total_exercises": 6,
+    "completed_exercises": 0,
+    "total_sets": 12,
+    "completed_sets": 0
+  },
+  "total_exercises": 6,
+  "completed_exercises": 0,
+  "total_sets": 12,
+  "completed_sets": 0
+}
+📚 [SESSION-HISTORY] Creating/updating session history: {
+  profile_id: 1,
+  session_date: '2025-09-29',
+  session_uuid: 'session_1759184973731_vekaknl34',
+  routine_name: 'Piernas y laterales A',
+  day_name: 'Lunes',
+  status: 'cancelled',
+  duration_minutes: 0,
+  total_exercises: 6,
+  completed_exercises: 0
+}
+❌ [SESSION-HISTORY] Error saving session history: new row for relation "session_history" violates check constraint "session_history_duration_minutes_check"
+❌ [2025-09-29T22:30:14.283Z] POST /api/v1/session-history - 500
+🚨 Error Response: {"success":false,"error":"Internal server error","message":"new row for relation \"session_history\" violates check constraint \"session_history_duration_minutes_check\""}
+🚀 [2025-09-29T22:35:24.400Z] GET /api/v1/routine-weeks?profile_id=1
+📅 Retrieved 7 routine weeks for profile 1
+✅ [2025-09-29T22:35:24.400Z] GET /api/v1/routine-weeks?profile_id=1 - 200
+🚀 [2025-09-29T22:35:24.541Z] GET /api/v1/routine-weeks/2/configuration?profile_id=1
+📋 Retrieved configuration for routine week 2: 6 exercises
+✅ [2025-09-29T22:35:24.541Z] GET /api/v1/routine-weeks/2/configuration?profile_id=1 - 200
+🚀 [2025-09-29T22:37:29.841Z] GET /api/v1/routine-weeks?profile_id=1
+📅 Retrieved 7 routine weeks for profile 1
+✅ [2025-09-29T22:37:29.841Z] GET /api/v1/routine-weeks?profile_id=1 - 200
+🚀 [2025-09-29T22:37:29.939Z] GET /api/v1/routine-weeks/2/configuration?profile_id=1
+📋 Retrieved configuration for routine week 2: 6 exercises
+✅ [2025-09-29T22:37:29.939Z] GET /api/v1/routine-weeks/2/configuration?profile_id=1 - 200
+🚀 [2025-09-29T22:42:17.908Z] GET /api/v1/routine-weeks?profile_id=1
+📅 Retrieved 7 routine weeks for profile 1
+✅ [2025-09-29T22:42:17.908Z] GET /api/v1/routine-weeks?profile_id=1 - 200
+🚀 [2025-09-29T22:42:17.990Z] GET /api/v1/routine-weeks/2/configuration?profile_id=1
+📋 Retrieved configuration for routine week 2: 6 exercises
+✅ [2025-09-29T22:42:17.990Z] GET /api/v1/routine-weeks/2/configuration?profile_id=1 - 200
+🚀 [2025-09-29T22:43:49.956Z] GET /api/v1/routine-weeks?profile_id=1
+📅 Retrieved 7 routine weeks for profile 1
+✅ [2025-09-29T22:43:49.956Z] GET /api/v1/routine-weeks?profile_id=1 - 200
+🚀 [2025-09-29T22:43:50.040Z] GET /api/v1/routine-weeks/2/configuration?profile_id=1
+📋 Retrieved configuration for routine week 2: 6 exercises
+✅ [2025-09-29T22:43:50.040Z] GET /api/v1/routine-weeks/2/configuration?profile_id=1 - 200
+🚀 [2025-09-29T22:54:39.662Z] GET /api/v1/routine-weeks?profile_id=1
+📅 Retrieved 7 routine weeks for profile 1
+✅ [2025-09-29T22:54:39.662Z] GET /api/v1/routine-weeks?profile_id=1 - 200
+🚀 [2025-09-29T22:54:39.775Z] GET /api/v1/routine-weeks/2/configuration?profile_id=1
+📋 Retrieved configuration for routine week 2: 6 exercises
+✅ [2025-09-29T22:54:39.775Z] GET /api/v1/routine-weeks/2/configuration?profile_id=1 - 200
+🚀 [2025-09-29T23:02:40.243Z] GET /api/v1/routine-weeks?profile_id=1
+📅 Retrieved 7 routine weeks for profile 1
+✅ [2025-09-29T23:02:40.243Z] GET /api/v1/routine-weeks?profile_id=1 - 200
+🚀 [2025-09-29T23:02:40.361Z] GET /api/v1/routine-weeks/2/configuration?profile_id=1
+📋 Retrieved configuration for routine week 2: 6 exercises
+✅ [2025-09-29T23:02:40.361Z] GET /api/v1/routine-weeks/2/configuration?profile_id=1 - 200
+🚀 [2025-09-29T23:10:51.329Z] GET /api/v1/routine-weeks?profile_id=1
+📅 Retrieved 7 routine weeks for profile 1
+✅ [2025-09-29T23:10:51.329Z] GET /api/v1/routine-weeks?profile_id=1 - 200
+🚀 [2025-09-29T23:10:51.473Z] GET /api/v1/routine-weeks/2/configuration?profile_id=1
+📋 Retrieved configuration for routine week 2: 6 exercises
+✅ [2025-09-29T23:10:51.473Z] GET /api/v1/routine-weeks/2/configuration?profile_id=1 - 200
+🚀 [2025-09-29T23:15:32.183Z] GET /api/v1/routine-weeks?profile_id=1
+📅 Retrieved 7 routine weeks for profile 1
+✅ [2025-09-29T23:15:32.183Z] GET /api/v1/routine-weeks?profile_id=1 - 200
+🚀 [2025-09-29T23:15:32.284Z] GET /api/v1/routine-weeks/2/configuration?profile_id=1
+📋 Retrieved configuration for routine week 2: 6 exercises
+✅ [2025-09-29T23:15:32.284Z] GET /api/v1/routine-weeks/2/configuration?profile_id=1 - 200
+🚀 [2025-09-29T23:18:29.410Z] GET /api/v1/training-days?profile_id=1
+✅ [2025-09-29T23:18:29.410Z] GET /api/v1/training-days?profile_id=1 - 200
+🚀 [2025-09-29T23:18:49.066Z] GET /api/v1/training-days?profile_id=2
+🚀 [2025-09-29T23:18:49.067Z] GET /api/v1/routine-weeks?profile_id=2
+✅ [2025-09-29T23:18:49.066Z] GET /api/v1/training-days?profile_id=2 - 200
+📅 Retrieved 7 routine weeks for profile 2
+✅ [2025-09-29T23:18:49.067Z] GET /api/v1/routine-weeks?profile_id=2 - 200
+🚀 [2025-09-29T23:18:49.188Z] GET /api/v1/routine-weeks/9/configuration?profile_id=2
+📋 Retrieved configuration for routine week 9: 4 exercises
+✅ [2025-09-29T23:18:49.188Z] GET /api/v1/routine-weeks/9/configuration?profile_id=2 - 200
+🚀 [2025-09-29T23:29:40.670Z] GET /api/v1/routine-weeks?profile_id=1
+📅 Retrieved 7 routine weeks for profile 1
+✅ [2025-09-29T23:29:40.670Z] GET /api/v1/routine-weeks?profile_id=1 - 200
+🚀 [2025-09-29T23:29:40.763Z] GET /api/v1/routine-weeks/2/configuration?profile_id=1
+📋 Retrieved configuration for routine week 2: 6 exercises
+✅ [2025-09-29T23:29:40.763Z] GET /api/v1/routine-weeks/2/configuration?profile_id=1 - 200
+🚀 [2025-09-29T23:29:41.597Z] GET /api/v1/routine-weeks?profile_id=2
+📅 Retrieved 7 routine weeks for profile 2
+✅ [2025-09-29T23:29:41.597Z] GET /api/v1/routine-weeks?profile_id=2 - 200
+🚀 [2025-09-29T23:29:48.793Z] GET /api/v1/routine-weeks?profile_id=2
+📅 Retrieved 7 routine weeks for profile 2
+✅ [2025-09-29T23:29:48.793Z] GET /api/v1/routine-weeks?profile_id=2 - 200
+🚀 [2025-09-29T23:29:48.824Z] GET /api/v1/routine-weeks/9/configuration?profile_id=2
+📋 Retrieved configuration for routine week 9: 4 exercises
+✅ [2025-09-29T23:29:48.824Z] GET /api/v1/routine-weeks/9/configuration?profile_id=2 - 200
+🚀 [2025-09-29T23:29:54.131Z] GET /api/v1/routine-weeks?profile_id=2
+📅 Retrieved 7 routine weeks for profile 2
+✅ [2025-09-29T23:29:54.131Z] GET /api/v1/routine-weeks?profile_id=2 - 200
+🚀 [2025-09-29T23:29:54.199Z] GET /api/v1/routine-weeks/9/configuration?profile_id=2
+📋 Retrieved configuration for routine week 9: 4 exercises
+✅ [2025-09-29T23:29:54.199Z] GET /api/v1/routine-weeks/9/configuration?profile_id=2 - 200
+🚀 [2025-09-29T23:30:05.298Z] GET /api/v1/routine-weeks?profile_id=1
+📅 Retrieved 7 routine weeks for profile 1
+✅ [2025-09-29T23:30:05.298Z] GET /api/v1/routine-weeks?profile_id=1 - 200
+🚀 [2025-09-29T23:30:15.523Z] GET /api/v1/routine-weeks?profile_id=2
+📅 Retrieved 7 routine weeks for profile 2
+✅ [2025-09-29T23:30:15.523Z] GET /api/v1/routine-weeks?profile_id=2 - 200

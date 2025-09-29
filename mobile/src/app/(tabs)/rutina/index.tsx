@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -19,11 +20,14 @@ import Toast from 'react-native-toast-message';
 import { useTrainingSession } from '@/features/training-sessions/hooks/useTrainingSession';
 import { useRoutineConfiguration } from '@/features/routine-configurations';
 import { CreateTrainingSessionRequest } from '@/features/training-sessions/types';
+import { TrainingSessionAsyncStorage } from '@/features/training-sessions/services/asyncStorageService';
+import { routineApi } from '@/features/routines/services';
+import { routineConfigurationApi } from '@/features/routine-configurations/services/routineConfigurationApi';
 
 const RoutineScreen = () => {
   const [iconsLoaded, setIconsLoaded] = useState(false);
   const router = useRouter();
-  const { currentProfile, profileId } = useProfile();
+  const { currentProfile, profileId, profiles } = useProfile();
   
   /* Business Logic */
   const {
@@ -42,7 +46,7 @@ const RoutineScreen = () => {
   } = useWeekSchedule();
 
   /* Training Session Logic */
-  const { activeSession, createSession } = useTrainingSession(profileId);
+  const { activeSession, createSession, cancelSession, isLoading: isSessionLoading } = useTrainingSession(profileId);
   
   /* Current Day Configuration */
   const currentDay = days[currentDayIndex] || {};
@@ -102,6 +106,35 @@ const RoutineScreen = () => {
     }
   };
 
+  const handleCancelSession = () => {
+    Alert.alert(
+      "Cancelar sesión",
+      "¿Estás seguro de que quieres cancelar la sesión actual? Se perderá todo el progreso.",
+      [
+        {
+          text: "No",
+          style: "cancel"
+        },
+        {
+          text: "Sí, cancelar",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await cancelSession();
+              Toast.show({
+                type: 'info',
+                text1: 'Sesión cancelada',
+                text2: 'La sesión ha sido cancelada',
+              });
+            } catch (error) {
+              console.error('Error canceling session:', error);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const handleStartSession = async () => {
     if (!currentProfile || !currentDay?.trainingDayName) {
       Toast.show({
@@ -127,7 +160,7 @@ const RoutineScreen = () => {
           dayName: currentDay.name,
           trainingDayName: currentDay.trainingDayName
         });
-        
+
         Toast.show({
           type: 'error',
           text1: 'No hay ejercicios configurados',
@@ -147,41 +180,61 @@ const RoutineScreen = () => {
         return;
       }
 
-      // Convertir day_of_week para training_sessions (que espera 1-7 en lugar de 0-6)
-      const trainingSessionDayOfWeek = convertDayOfWeekForTrainingSession(currentRoutineInfo.day_of_week);
-      
-      console.log('🚀 Iniciando sesión con datos:', {
-        routineWeekId: currentRoutineInfo.id,
-        routineWeekDayOfWeek: currentRoutineInfo.day_of_week,
-        trainingSessionDayOfWeek,
-        dayName: currentRoutineInfo.day_name,
-        exerciseCount: exercises.length
-      });
+      // Verificar si ambos perfiles tienen entreno hoy
+      const otherProfile = profiles.find(p => p.id !== profileId);
+      let otherProfileHasTraining = false;
 
-      // Crear nueva sesión usando el backend
-      const sessionData: CreateTrainingSessionRequest = {
-        profile_id: profileId,
-        routine_week_id: currentRoutineInfo.id,
-        routine_name: currentDay.trainingDayName || 'Rutina',
-        day_of_week: trainingSessionDayOfWeek, // Usar el formato correcto para training_sessions
-        day_name: currentDay.name,
-        exercises: exercises.map((exercise, index) => ({
-          exercise_id: exercise.exercise_id,
-          exercise_name: exercise.exercise_name,
-          exercise_image: exercise.exercise_image,
-          sets_config: exercise.sets_config,
-        })),
-      };
+      if (otherProfile) {
+        try {
+          // Obtener la semana de rutinas del otro perfil
+          const otherRoutineWeeks = await routineApi.getWeekSchedule(otherProfile.id);
+          const today = new Date();
+          const todayDayIndex = today.getDay(); // 0 = Sunday, 6 = Saturday
 
-      await createSession(sessionData);
-      
-      Toast.show({
-        type: 'success',
-        text1: 'Sesión iniciada',
-        text2: '¡Comienza tu entrenamiento!',
-      });
+          // Encontrar el día actual en la semana del otro perfil
+          const otherProfileCurrentDay = otherRoutineWeeks.find(week => week.day_of_week === todayDayIndex);
 
-      router.push("/(tabs)/rutina/sesion-de-entrenamiento");
+          // Verificar si tiene entreno asignado y no es día de descanso
+          if (otherProfileCurrentDay && otherProfileCurrentDay.routine_id && !otherProfileCurrentDay.is_rest_day) {
+            // Verificar que no tenga sesión activa ya
+            const otherProfileActiveSession = await TrainingSessionAsyncStorage.getActiveSession(otherProfile.id);
+            if (!otherProfileActiveSession) {
+              otherProfileHasTraining = true;
+            }
+          }
+        } catch (error) {
+          console.error('Error checking other profile training:', error);
+        }
+      }
+
+      // Si ambos perfiles tienen entreno, mostrar Alert
+      if (otherProfileHasTraining && otherProfile) {
+        Alert.alert(
+          'Iniciar sesiones',
+          `${otherProfile.display_name || otherProfile.profile_name} también tiene entreno hoy. ¿Quieres iniciar la sesión en ambos perfiles?`,
+          [
+            {
+              text: 'Solo este perfil',
+              onPress: async () => {
+                await startSingleSession(currentRoutineInfo);
+              },
+            },
+            {
+              text: 'Ambos perfiles',
+              onPress: async () => {
+                await startBothSessions(currentRoutineInfo, otherProfile.id);
+              },
+            },
+            {
+              text: 'Cancelar',
+              style: 'cancel',
+            },
+          ]
+        );
+      } else {
+        // Solo iniciar sesión del perfil actual
+        await startSingleSession(currentRoutineInfo);
+      }
     } catch (error) {
       console.error('Error starting session:', error);
       Toast.show({
@@ -192,10 +245,138 @@ const RoutineScreen = () => {
     }
   };
 
+  const startSingleSession = async (currentRoutineInfo: any) => {
+    try {
+      // Convertir day_of_week para training_sessions (que espera 1-7 en lugar de 0-6)
+      const trainingSessionDayOfWeek = convertDayOfWeekForTrainingSession(currentRoutineInfo.day_of_week);
+
+      console.log('🚀 Iniciando sesión con datos:', {
+        routineWeekId: currentRoutineInfo.id,
+        routineWeekDayOfWeek: currentRoutineInfo.day_of_week,
+        trainingSessionDayOfWeek,
+        dayName: currentRoutineInfo.day_name,
+        exerciseCount: exercises.length
+      });
+
+      // Crear nueva sesión
+      const sessionData: CreateTrainingSessionRequest = {
+        profile_id: profileId,
+        routine_week_id: currentRoutineInfo.id,
+        routine_name: currentDay.trainingDayName || 'Rutina',
+        day_of_week: trainingSessionDayOfWeek,
+        day_name: currentDay.name,
+        exercises: exercises.map((exercise, index) => ({
+          exercise_id: exercise.exercise_id,
+          exercise_name: exercise.exercise_name,
+          exercise_image: exercise.exercise_image,
+          sets_config: exercise.sets_config,
+        })),
+      };
+
+      await createSession(sessionData);
+
+      console.log('✅ Session created, navigating to training screen...');
+
+      // Navigate
+      router.push("/rutina/sesion-de-entrenamiento");
+
+      // Show toast
+      Toast.show({
+        type: 'success',
+        text1: 'Sesión iniciada',
+        text2: '¡Comienza tu entrenamiento!',
+      });
+    } catch (error) {
+      console.error('Error starting single session:', error);
+      throw error;
+    }
+  };
+
+  const startBothSessions = async (currentRoutineInfo: any, otherProfileId: number) => {
+    try {
+      // Crear sesión para el perfil actual
+      const trainingSessionDayOfWeek = convertDayOfWeekForTrainingSession(currentRoutineInfo.day_of_week);
+
+      const sessionData: CreateTrainingSessionRequest = {
+        profile_id: profileId,
+        routine_week_id: currentRoutineInfo.id,
+        routine_name: currentDay.trainingDayName || 'Rutina',
+        day_of_week: trainingSessionDayOfWeek,
+        day_name: currentDay.name,
+        exercises: exercises.map((exercise, index) => ({
+          exercise_id: exercise.exercise_id,
+          exercise_name: exercise.exercise_name,
+          exercise_image: exercise.exercise_image,
+          sets_config: exercise.sets_config,
+        })),
+      };
+
+      await createSession(sessionData);
+
+      // Obtener datos del otro perfil
+      const otherRoutineWeeks = await routineApi.getWeekSchedule(otherProfileId);
+      const today = new Date();
+      const todayDayIndex = today.getDay();
+      const otherProfileCurrentDay = otherRoutineWeeks.find(week => week.day_of_week === todayDayIndex);
+
+      if (otherProfileCurrentDay && otherProfileCurrentDay.routine_id) {
+        // Obtener configuración del otro perfil
+        const otherRoutineWeekId = otherProfileCurrentDay.id;
+        const otherConfiguration = await routineConfigurationApi.getConfiguration(otherRoutineWeekId, otherProfileId);
+
+        if (otherConfiguration && otherConfiguration.exercises && otherConfiguration.exercises.length > 0) {
+          const otherTrainingSessionDayOfWeek = convertDayOfWeekForTrainingSession(otherProfileCurrentDay.day_of_week);
+
+          const otherSessionData: CreateTrainingSessionRequest = {
+            profile_id: otherProfileId,
+            routine_week_id: otherRoutineWeekId,
+            routine_name: otherProfileCurrentDay.routine_name || 'Rutina',
+            day_of_week: otherTrainingSessionDayOfWeek,
+            day_name: otherProfileCurrentDay.day_name,
+            exercises: otherConfiguration.exercises.map((exercise: any) => ({
+              exercise_id: exercise.exercise_id,
+              exercise_name: exercise.exercise_name,
+              exercise_image: exercise.exercise_image,
+              sets_config: exercise.sets_config,
+            })),
+          };
+
+          await TrainingSessionAsyncStorage.createSession(otherSessionData);
+        }
+      }
+
+      console.log('✅ Both sessions created, navigating to training screen...');
+
+      router.push("/rutina/sesion-de-entrenamiento");
+
+      Toast.show({
+        type: 'success',
+        text1: 'Sesiones iniciadas',
+        text2: '¡Ambos perfiles listos para entrenar!',
+      });
+    } catch (error) {
+      console.error('Error starting both sessions:', error);
+      throw error;
+    }
+  };
+
   /* Derived State */
   const isCurrentDayCompletedToday = isDayCompletedToday(currentDay);
   const hasExercisesConfigured = exercises && exercises.length > 0;
   const isSessionDisabled = isCurrentDayCompletedToday || !currentDay?.trainingDayName || !hasExercisesConfigured;
+
+  /* Debug button state */
+  useEffect(() => {
+    console.log('🔘 [Button State]:', {
+      isSessionDisabled,
+      isCurrentDayCompletedToday,
+      hasTrainingDay: !!currentDay?.trainingDayName,
+      trainingDayName: currentDay?.trainingDayName,
+      hasExercisesConfigured,
+      exercisesCount: exercises?.length || 0,
+      activeSession: !!activeSession
+    });
+  }, [isSessionDisabled, isCurrentDayCompletedToday, currentDay?.trainingDayName, hasExercisesConfigured, exercises?.length, activeSession]);
 
   /* Debug logging for completion status */
   useEffect(() => {
@@ -286,15 +467,30 @@ const RoutineScreen = () => {
     </TouchableOpacity>
   );
 
-  const sessionButton = (
-    <TouchableOpacity
-      style={[styles.button, isSessionDisabled && styles.disabledButton]}
-      onPress={handleStartSession}
-      disabled={isSessionDisabled}
-      testID="button-start-session"
-    >
-      <Text style={styles.buttonText}>{ButtonText}</Text>
-    </TouchableOpacity>
+  const sessionButtons = (
+    <View style={styles.buttonContainer}>
+      <TouchableOpacity
+        style={[styles.button, isSessionDisabled && styles.disabledButton]}
+        onPress={handleStartSession}
+        disabled={isSessionDisabled}
+        testID="button-start-session"
+      >
+        <Text style={styles.buttonText}>{ButtonText}</Text>
+      </TouchableOpacity>
+
+      {activeSession && (
+        <TouchableOpacity
+          style={[styles.cancelButton, isSessionLoading && styles.cancelButtonDisabled]}
+          onPress={handleCancelSession}
+          disabled={isSessionLoading}
+          testID="button-cancel-session"
+        >
+          <Text style={styles.cancelButtonText}>
+            {isSessionLoading ? '...' : '🗑️'}
+          </Text>
+        </TouchableOpacity>
+      )}
+    </View>
   );
 
   if (isLoading) {
@@ -367,7 +563,7 @@ const RoutineScreen = () => {
           </LinearGradientItem>
         ))}
       </ScrollView>
-      {sessionButton}
+      {sessionButtons}
       {floatingSettingsButton}
     </View>
   );
@@ -431,12 +627,38 @@ const styles = StyleSheet.create({
   restDayText: {
     color: "#6c757d",
   },
+  buttonContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 20,
+  },
   button: {
+    flex: 1,
     backgroundColor: "#2979FF",
     paddingVertical: 15,
     borderRadius: 10,
     alignItems: "center",
-    marginTop: 20,
+  },
+  cancelButton: {
+    backgroundColor: "#FF5252",
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  cancelButtonDisabled: {
+    backgroundColor: "#A5A5A5",
+    opacity: 0.6,
   },
   disabledButton: {
     backgroundColor: "#A5A5A5",
@@ -444,6 +666,9 @@ const styles = StyleSheet.create({
   buttonText: {
     color: "#FFFFFF",
     fontSize: 18,
+  },
+  cancelButtonText: {
+    fontSize: 20,
   },
   ellipsisContainer: {
     position: 'relative',

@@ -1171,6 +1171,7 @@ const ConfigureTrainingDayScreen = () => {
             </Text>
           </TouchableOpacity>
         )}
+
       </ScrollView>
     </View>
   );
