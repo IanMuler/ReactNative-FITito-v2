@@ -182,6 +182,21 @@ export const useWeekSchedule = () => {
     });
   }, [routineWeeks, updateWeekMutation, profileId]);
 
+  const assignTrainingDayToDay = useCallback(async (dayName: string, trainingDayId: number) => {
+    const routineWeek = routineWeeks.find(rw => rw.day_name === dayName);
+    if (!routineWeek) return;
+
+    updateWeekMutation.mutate({
+      routineWeekId: routineWeek.id,
+      update: {
+        training_day_id: trainingDayId,
+        is_rest_day: false,
+        profile_id: profileId,
+      },
+      operationType: 'assign'
+    });
+  }, [routineWeeks, updateWeekMutation, profileId]);
+
   const removeRoutineFromDay = useCallback(async (dayName: string) => {
     const routineWeek = routineWeeks.find(rw => rw.day_name === dayName);
     if (!routineWeek) return;
@@ -235,6 +250,51 @@ export const useWeekSchedule = () => {
     }
   }, [profileId, isLoading, routineWeeks.length, error]);
 
+  /* Helper to get routine week info for current day */
+  const getCurrentRoutineWeekInfo = useCallback(() => {
+    if (!routineWeeks.length) return null;
+    
+    // Convert UI currentDayIndex back to backend day_of_week
+    // currentDayIndex: Monday=0, Tuesday=1, ..., Sunday=6
+    // backend day_of_week: Sunday=0, Monday=1, ..., Saturday=6
+    const backendDayOfWeek = currentDayIndex === 6 ? 0 : currentDayIndex + 1;
+    
+    // Find the routine week that matches this day_of_week
+    const routineWeek = routineWeeks.find(rw => rw.day_of_week === backendDayOfWeek);
+    
+    console.log('🗓️ getCurrentRoutineWeekInfo:', {
+      currentDayIndex,
+      backendDayOfWeek,
+      routineWeekId: routineWeek?.id,
+      dayName: routineWeek?.day_name,
+      hasExercises: routineWeek ? (routineWeek.exercises_config?.length || 0) > 0 : false
+    });
+    
+    return routineWeek ? {
+      id: routineWeek.id,
+      day_of_week: routineWeek.day_of_week,
+      day_name: routineWeek.day_name,
+      routine_name: routineWeek.routine_name,
+      exercises_config: routineWeek.exercises_config || []
+    } : null;
+  }, [routineWeeks, currentDayIndex]);
+
+  /* Helper to get routine week ID for current day (backward compatibility) */
+  const getCurrentRoutineWeekId = useCallback(() => {
+    const info = getCurrentRoutineWeekInfo();
+    return info?.id || null;
+  }, [getCurrentRoutineWeekInfo]);
+
+  /* Helper to convert day_of_week from routine_weeks format (0-6) to training_sessions format (1-7) */
+  const convertDayOfWeekForTrainingSession = useCallback((routineWeekDayOfWeek: number): number => {
+    // routine_weeks: Sunday=0, Monday=1, ..., Saturday=6
+    // training_sessions: Monday=1, Tuesday=2, ..., Sunday=7
+    if (routineWeekDayOfWeek === 0) {
+      return 7; // Sunday: 0 -> 7
+    }
+    return routineWeekDayOfWeek; // Monday-Saturday: 1-6 -> 1-6
+  }, []);
+
   return {
     // Data
     days,
@@ -242,6 +302,7 @@ export const useWeekSchedule = () => {
     currentWeek,
     month,
     year,
+    routineWeeks, // Add raw routine weeks data
     
     // States
     isLoading: isLoading || initializeMutation.isPending,
@@ -251,10 +312,14 @@ export const useWeekSchedule = () => {
     // Helpers
     getTodayString,
     isDayCompletedToday,
+    getCurrentRoutineWeekId,
+    getCurrentRoutineWeekInfo,
+    convertDayOfWeekForTrainingSession,
     
     // Actions
     toggleRestDay,
     assignRoutineToDay,
+    assignTrainingDayToDay,
     removeRoutineFromDay,
     markDayCompleted,
     initializeSchedule: () => initializeMutation.mutate(),

@@ -3,6 +3,9 @@ const cors = require('cors');
 const { Pool } = require('pg');
 require('dotenv').config();
 
+// Set timezone to Argentina (UTC-3)
+process.env.TZ = 'America/Argentina/Buenos_Aires';
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -16,11 +19,42 @@ const pool = new Pool({
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
+  // Set timezone for all connections
+  options: '--timezone=America/Argentina/Buenos_Aires'
 });
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Request logging middleware
+app.use((req, res, next) => {
+  const timestamp = new Date().toISOString();
+  const method = req.method;
+  const url = req.url;
+  const body = req.body && Object.keys(req.body).length > 0 ? req.body : null;
+  
+  console.log(`🚀 [${timestamp}] ${method} ${url}`);
+  if (body) {
+    console.log(`📦 Request Body:`, JSON.stringify(body, null, 2));
+  }
+  
+  // Log response
+  const originalSend = res.send;
+  res.send = function(data) {
+    const statusCode = res.statusCode;
+    const statusEmoji = statusCode >= 400 ? '❌' : '✅';
+    console.log(`${statusEmoji} [${timestamp}] ${method} ${url} - ${statusCode}`);
+    
+    if (statusCode >= 400) {
+      console.log(`🚨 Error Response:`, data);
+    }
+    
+    originalSend.call(this, data);
+  };
+  
+  next();
+});
 
 // Health check
 app.get('/health', async (req, res) => {
@@ -314,8 +348,16 @@ app.post('/api/v1/training-days', async (req, res) => {
   try {
     const { profile_id, name, description, exercises = [] } = req.body;
     
+    console.log('🏋️ Creating training day:', {
+      profile_id,
+      name,
+      description,
+      exerciseCount: exercises.length,
+      exercises: exercises.map(ex => ({ id: ex.exercise_id, sets: ex.sets, reps: ex.reps, weight: ex.weight }))
+    });
     
     if (!profile_id || !name) {
+      console.log('❌ Validation failed: Missing profile_id or name', { profile_id, name });
       return res.status(400).json({
         success: false,
         error: 'profile_id and name are required'
@@ -323,27 +365,33 @@ app.post('/api/v1/training-days', async (req, res) => {
     }
     
     if (exercises.length === 0) {
+      console.log('❌ Validation failed: No exercises provided');
       return res.status(400).json({
         success: false,
         error: 'At least one exercise is required'
       });
     }
     
+    console.log('🔄 Starting transaction for training day creation');
     await client.query('BEGIN');
     
     // Check for duplicate name for this profile
+    console.log('🔍 Checking for duplicate training day name:', { profile_id, name });
     const duplicateCheck = await client.query(`
       SELECT id FROM training_days 
       WHERE profile_id = $1 AND name = $2 AND is_active = true
     `, [profile_id, name]);
     
     if (duplicateCheck.rows.length > 0) {
+      console.log('❌ Duplicate training day name found:', duplicateCheck.rows[0]);
       await client.query('ROLLBACK');
       return res.status(409).json({
         success: false,
         error: 'A training day with this name already exists'
       });
     }
+    
+    console.log('✅ No duplicate found, proceeding with creation');
     
     // Create training day
     const dayResult = await client.query(`
@@ -1177,13 +1225,14 @@ app.put('/api/v1/routine-weeks/:id', async (req, res) => {
   
   try {
     const { id } = req.params;
-    const { profile_id, routine_id, is_rest_day, completed_date } = req.body;
+    const { profile_id, routine_id, training_day_id, is_rest_day, completed_date } = req.body;
     
     console.log('🎯 [API] Update routine week request:', {
       routineWeekId: id,
       requestBody: req.body,
       profile_id,
       routine_id,
+      training_day_id,
       is_rest_day,
       completed_date,
     });
@@ -1197,8 +1246,18 @@ app.put('/api/v1/routine-weeks/:id', async (req, res) => {
 
     await client.query('BEGIN');
     
-    // Validate that the routine belongs to this profile (if routine_id provided)
+    // Handle routine_id or training_day_id assignment
+    let finalRoutineId = routine_id;
+    
+    console.log('🔍 [DEBUG] Checking conditions:', {
+      hasRoutineId: !!routine_id,
+      routineIdValue: routine_id,
+      hasTrainingDayId: !!training_day_id,
+      trainingDayIdValue: training_day_id
+    });
+    
     if (routine_id) {
+      // If routine_id provided, validate it exists
       const routineCheck = await client.query(`
         SELECT id FROM routines 
         WHERE id = $1 AND profile_id = $2 AND is_active = true
@@ -1211,6 +1270,40 @@ app.put('/api/v1/routine-weeks/:id', async (req, res) => {
           error: 'Routine not found or does not belong to this profile'
         });
       }
+    } else if (training_day_id) {
+      // If training_day_id provided, create a routine from the training day
+      const trainingDayId = training_day_id;
+      
+      // Validate training day exists and belongs to profile
+      const trainingDayCheck = await client.query(`
+        SELECT id, name FROM training_days 
+        WHERE id = $1 AND profile_id = $2
+      `, [trainingDayId, profile_id]);
+      
+      if (trainingDayCheck.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({
+          success: false,
+          error: 'Training day not found or does not belong to this profile'
+        });
+      }
+      
+      const trainingDay = trainingDayCheck.rows[0];
+      
+      // Create a routine from the training day
+      const createRoutineResult = await client.query(`
+        INSERT INTO routines (name, description, profile_id, is_active, created_at)
+        VALUES ($1, $2, $3, true, NOW())
+        RETURNING id
+      `, [`Rutina - ${trainingDay.name}`, `Rutina creada automáticamente desde ${trainingDay.name}`, profile_id]);
+      
+      finalRoutineId = createRoutineResult.rows[0].id;
+      
+      console.log('✅ Created routine from training day:', {
+        trainingDayId,
+        trainingDayName: trainingDay.name,
+        newRoutineId: finalRoutineId
+      });
     }
     
     // Update routine week (preserve routine_name, training_day_id, exercises_config if they exist)
@@ -1218,9 +1311,9 @@ app.put('/api/v1/routine-weeks/:id', async (req, res) => {
     const updateValues = [];
     let paramCount = 1;
     
-    if (routine_id !== undefined) {
+    if (finalRoutineId !== undefined) {
       updateFields.push(`routine_id = $${paramCount}`);
-      updateValues.push(routine_id);
+      updateValues.push(finalRoutineId);
       paramCount++;
     }
     
@@ -1944,20 +2037,20 @@ app.get('/api/v1/workout-history/:profileId/:date', async (req, res) => {
     }
     
     
-    // Query for workout session on the specific date (using migration 004 schema)
+    // Query for training session on the specific date (using training_sessions schema)
     const sessionResult = await pool.query(`
       SELECT 
-        ws.id,
-        ws.name,
-        ws.started_at,
-        ws.completed_at,
-        ws.duration_minutes,
-        TO_CHAR(ws.started_at, 'DD/MM/YYYY') as formatted_date
-      FROM workout_sessions ws
-      WHERE ws.profile_id = $1 
-        AND DATE(ws.started_at) = $2
-        AND ws.is_completed = true
-      ORDER BY ws.started_at DESC
+        ts.id,
+        ts.routine_name as name,
+        ts.created_at as started_at,
+        NULL as completed_at,
+        NULL as duration_minutes,
+        TO_CHAR(ts.created_at, 'DD/MM/YYYY') as formatted_date
+      FROM training_sessions ts
+      WHERE ts.profile_id = $1 
+        AND DATE(ts.created_at) = $2
+        AND ts.status = 'completed'
+      ORDER BY ts.created_at DESC
       LIMIT 1
     `, [profileId, dbDateString]);
     
@@ -1972,38 +2065,35 @@ app.get('/api/v1/workout-history/:profileId/:date', async (req, res) => {
     const session = sessionResult.rows[0];
     console.log(`📋 [ASYNC-STORAGE] Found session: ${session.name}`);
     
-    // Get performed data from workout session sets (migration 007 schema)
+    // Get performed data from training session progress
     const workoutSetsResult = await pool.query(`
       SELECT 
-        wse.exercise_id,
+        tsp.exercise_id,
         e.name as exercise_name,
         e.image as exercise_image,
-        wss.set_number,
-        wss.reps as performed_reps,
-        wss.weight as performed_weight,
-        wss.rir as performed_rir,
-        wss.is_completed,
-        wss.notes
-      FROM workout_session_exercises wse
-      JOIN workout_session_sets wss ON wse.id = wss.workout_session_exercise_id
-      JOIN exercises e ON wse.exercise_id = e.id
-      WHERE wse.workout_session_id = $1
-      ORDER BY wse.exercise_id, wss.set_number
+        tsp.set_number,
+        tsp.reps as performed_reps,
+        tsp.weight as performed_weight,
+        tsp.rir as performed_rir,
+        tsp.is_completed,
+        tsp.notes
+      FROM training_session_progress tsp
+      JOIN exercises e ON tsp.exercise_id = e.id
+      WHERE tsp.training_session_id = $1
+      ORDER BY tsp.exercise_id, tsp.set_number
     `, [session.id]);
     
     // Get planned data from routine_weeks.exercises_config (JSONB)
     // This contains the original routine configuration that was planned
-    // Calculate day of week from workout session's completed_at timestamp
+    // Use the training session's routine_week_id to get the planned data
     const plannedDataResult = await pool.query(`
       SELECT 
         rw.exercises_config
-      FROM workout_sessions ws
-      LEFT JOIN routine_weeks rw ON rw.profile_id = ws.profile_id 
-        AND rw.day_of_week = EXTRACT(DOW FROM COALESCE(ws.completed_at, ws.started_at))
-      WHERE ws.id = $1
+      FROM training_sessions ts
+      LEFT JOIN routine_weeks rw ON rw.id = ts.routine_week_id
+      WHERE ts.id = $1
       AND rw.exercises_config IS NOT NULL 
       AND rw.exercises_config != '[]'
-      ORDER BY rw.completed_date DESC
       LIMIT 1
     `, [session.id]);
     
@@ -2080,8 +2170,6 @@ app.get('/api/v1/workout-history/:profileId/:date', async (req, res) => {
     };
     
     console.log(`✅ [ASYNC-STORAGE] Returning ${Object.keys(exerciseGroups).length} exercises for ${date}`);
-    console.log(`🔍 [ASYNC-STORAGE] Final exerciseGroups:`, JSON.stringify(exerciseGroups, null, 2));
-    console.log(`🔍 [ASYNC-STORAGE] Final historyEntry:`, JSON.stringify(historyEntry, null, 2));
     
     // Final response logging
     const finalResponse = {

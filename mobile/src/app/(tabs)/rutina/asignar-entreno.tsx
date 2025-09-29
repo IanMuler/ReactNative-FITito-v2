@@ -11,6 +11,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import RadialGradientBackground from "@/components/ui/RadialGradientBackground";
 import { useTrainingDayList } from "@/features/training-days";
 import type { TrainingDay } from "@/features/training-days/types";
+import { useWeekSchedule } from "@/features/routines";
 
 const AssignTrainingDayScreen = () => {
   const router = useRouter();
@@ -18,8 +19,13 @@ const AssignTrainingDayScreen = () => {
 
   /* Load real training days */
   const { trainingDays, isLoading, error, refreshing, onRefresh } = useTrainingDayList();
+  const { assignTrainingDayToDay } = useWeekSchedule();
 
-  const assignTrainingDay = (trainingDay: TrainingDay) => {
+  const assignTrainingDay = async (trainingDay: TrainingDay) => {
+    // Assign the training day to the day of the week
+    await assignTrainingDayToDay(dayName as string, trainingDay.id);
+    
+    // Navigate to configuration
     router.push({
       pathname: "/(tabs)/rutina/configurar-entreno",
       params: { dayName, trainingDayName: trainingDay.name },

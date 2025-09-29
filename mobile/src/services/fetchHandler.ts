@@ -42,6 +42,58 @@ const logError = (errorDetails: ErrorDetails): void => {
     requestBody: errorDetails.requestBody || 'None',
     responseBody: errorDetails.responseBody || 'No response body',
   });
+
+  // Log specific error details based on status code
+  if (errorDetails.status >= 400 && errorDetails.status < 500) {
+    console.error('❌ Client Error Details:', {
+      type: 'Client Error (4xx)',
+      description: 'The request was invalid or unauthorized',
+      commonCauses: [
+        '400: Bad Request - Invalid data format',
+        '401: Unauthorized - Missing authentication',
+        '403: Forbidden - Access denied',
+        '404: Not Found - Endpoint or resource not found',
+        '409: Conflict - Resource already exists',
+        '422: Validation Error - Invalid field values'
+      ]
+    });
+  } else if (errorDetails.status >= 500) {
+    console.error('💥 Server Error Details:', {
+      type: 'Server Error (5xx)',
+      description: 'The server encountered an error',
+      commonCauses: [
+        '500: Internal Server Error - Server bug or database issue',
+        '502: Bad Gateway - Server unavailable',
+        '503: Service Unavailable - Server overloaded'
+      ]
+    });
+  }
+};
+
+/**
+ * Logs request initiation for debugging
+ */
+const logRequestStart = (method: string, url: string, body?: any): void => {
+  console.log('🚀 API Request Started:', {
+    timestamp: new Date().toISOString(),
+    method,
+    url,
+    hasBody: !!body,
+    bodyPreview: body ? JSON.stringify(body).substring(0, 200) + (JSON.stringify(body).length > 200 ? '...' : '') : 'None'
+  });
+};
+
+/**
+ * Logs successful request completion
+ */
+const logRequestSuccess = (method: string, url: string, status: number, responseSize?: number): void => {
+  console.log('✅ API Request Success:', {
+    timestamp: new Date().toISOString(),
+    method,
+    url,
+    status,
+    responseSize: responseSize || 'Unknown'
+  });
 };
 
 /**
@@ -93,6 +145,9 @@ const makeRequest = async <T>(
     requestConfig.body = JSON.stringify(body);
   }
 
+  // Log request start
+  logRequestStart(method, url, body);
+
   try {
     const response = await fetch(url, requestConfig);
 
@@ -129,26 +184,47 @@ const makeRequest = async <T>(
     // Parse JSON response
     const result: ApiResponse<T> = await response.json();
     
+    // Log successful request
+    const responseSize = JSON.stringify(result).length;
+    logRequestSuccess(method, url, response.status, responseSize);
+    
     // Return the data from the response
     return result.data;
 
   } catch (error) {
     // If it's already our custom error, re-throw it
-    if (error instanceof Error) {
+    if (error instanceof Error && error.message.includes('HTTP')) {
       throw error;
     }
 
-    // Log unexpected errors
-    console.error('🚨 Unexpected API Error:', {
+    // Log network/connectivity errors with more details
+    console.error('🚨 Network/Connectivity Error:', {
       endpoint,
       method,
       url,
       error: error,
       timestamp: new Date().toISOString(),
+      errorType: error instanceof TypeError ? 'Network/Fetch Error' : 'Unknown Error',
+      possibleCauses: [
+        'Server is down or unreachable',
+        'Network connectivity issues',
+        'CORS configuration problems',
+        'Request timeout',
+        'DNS resolution failure'
+      ]
     });
 
-    // Throw generic error for unexpected failures
-    throw new Error('Network request failed');
+    // Provide more specific error messages based on error type
+    let errorMessage = 'Network request failed';
+    if (error instanceof TypeError) {
+      if (error.message.includes('Failed to fetch')) {
+        errorMessage = 'Unable to reach server. Check your internet connection and server status.';
+      } else if (error.message.includes('Network request failed')) {
+        errorMessage = 'Network error occurred. Please check your connection.';
+      }
+    }
+
+    throw new Error(errorMessage);
   }
 };
 

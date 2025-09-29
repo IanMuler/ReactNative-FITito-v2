@@ -5,7 +5,6 @@ import { legacyHistoryApi } from '../services';
 import { HistoryEntry } from '../types';
 
 export const useLegacyHistory = (profileId: number, date: string) => {
-  console.log(`🔍 [LEGACY-HOOK] Initializing history hook for profile ${profileId}, date: ${date}`);
 
   /* Request hook using TanStack Query */
   const {
@@ -33,12 +32,6 @@ export const useLegacyHistory = (profileId: number, date: string) => {
 
   /* Derived data - mimics original filtering logic */
   const dayHistory = historyData.filter((entry: HistoryEntry) => entry.date === date);
-  
-  console.log(`📅 [LEGACY-HOOK] Filtered day history for ${date}:`, {
-    totalEntries: historyData.length,
-    dayEntries: dayHistory.length,
-    exercisesCount: dayHistory.reduce((total, entry) => total + entry.exerciseDetails.length, 0)
-  });
 
   return {
     /* Data */

@@ -133,6 +133,11 @@ export interface LocalTrainingProgress {
   hasUnsavedChanges: boolean;
 }
 
+export interface MultiProfileTrainingProgress {
+  progressByProfile: Record<number, LocalTrainingProgress>; // profileId -> training progress
+  currentProfileId: number;
+}
+
 export interface CompleteSessionRequest {
   notes?: string;
   rating?: number;

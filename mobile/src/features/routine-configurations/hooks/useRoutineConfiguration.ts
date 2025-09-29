@@ -108,7 +108,7 @@ export const useRoutineConfiguration = (routineWeekId: number, profileId: number
 
     // Actions
     updateConfiguration: (exercises: ExerciseConfiguration[], routineName?: string) =>
-      updateMutation.mutate({
+      updateMutation.mutateAsync({
         profile_id: profileId,
         routine_name: routineName,
         exercises: exercises.map(exercise => ({

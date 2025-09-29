@@ -5,20 +5,50 @@ import Toast from 'react-native-toast-message';
 import { RadialGradientBackground } from '@/components';
 import NumberInput from '@/components/ui/NumberInput';
 import { useProfile } from '@/features/profile';
+import { ProfileSwitch } from '@/features/profile/components';
 import { useTrainingSession } from '@/features/training-sessions/hooks/useTrainingSession';
-import { LocalTrainingProgress, LocalSetProgress, LocalExerciseProgress } from '@/features/training-sessions/types';
+import { LocalTrainingProgress, LocalSetProgress, LocalExerciseProgress, MultiProfileTrainingProgress } from '@/features/training-sessions/types';
 
 export default function SesionEntrenoPage() {
   const router = useRouter();
   const { profileId } = useProfile();
   
-  /* State */
+  /* State - Multi-profile aware */
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
-  const [localProgress, setLocalProgress] = useState<LocalTrainingProgress>({
-    exerciseProgress: {},
-    currentExerciseIndex: 0,
-    hasUnsavedChanges: false
+  const [multiProfileProgress, setMultiProfileProgress] = useState<MultiProfileTrainingProgress>({
+    progressByProfile: {},
+    currentProfileId: profileId
   });
+
+  // Helper function to get current profile's progress
+  const getCurrentProfileProgress = (): LocalTrainingProgress => {
+    return multiProfileProgress.progressByProfile[profileId] || {
+      exerciseProgress: {},
+      currentExerciseIndex: 0,
+      hasUnsavedChanges: false
+    };
+  };
+
+  // Helper function to update current profile's progress
+  const updateCurrentProfileProgress = (updater: (prev: LocalTrainingProgress) => LocalTrainingProgress) => {
+    setMultiProfileProgress(prev => ({
+      ...prev,
+      progressByProfile: {
+        ...prev.progressByProfile,
+        [profileId]: updater(getCurrentProfileProgress())
+      },
+      currentProfileId: profileId
+    }));
+  };
+
+  // Helper function to update current exercise index for current profile
+  const updateCurrentExerciseIndex = (newIndex: number) => {
+    setCurrentExerciseIndex(newIndex);
+    updateCurrentProfileProgress(prev => ({
+      ...prev,
+      currentExerciseIndex: newIndex
+    }));
+  };
 
   /* Training Session Hook */
   const {
@@ -45,15 +75,37 @@ export default function SesionEntrenoPage() {
   useEffect(() => {
     if (activeSession && activeSession.exercises) {
       const maxIndex = activeSession.exercises.length - 1;
-      if (currentExerciseIndex > maxIndex) {
-        setCurrentExerciseIndex(Math.max(0, maxIndex));
+      const currentProgress = getCurrentProfileProgress();
+      if (currentProgress.currentExerciseIndex > maxIndex) {
+        updateCurrentProfileProgress(prev => ({
+          ...prev,
+          currentExerciseIndex: Math.max(0, maxIndex)
+        }));
+        updateCurrentExerciseIndex(Math.max(0, maxIndex));
+      } else {
+        updateCurrentExerciseIndex(currentProgress.currentExerciseIndex);
       }
     }
-  }, [activeSession, currentExerciseIndex]);
+  }, [activeSession, profileId]);
 
   /* Initialize local progress when session loads */
   useEffect(() => {
     if (activeSession) {
+      console.log('🏋️ [SESSION] Initializing progress for profile:', {
+        profileId,
+        sessionId: activeSession.id,
+        routineName: activeSession.routine_name,
+        exerciseCount: activeSession.exercises.length
+      });
+
+      // Check if we already have progress for this profile
+      const existingProgress = getCurrentProfileProgress();
+      if (Object.keys(existingProgress.exerciseProgress).length > 0) {
+        console.log('📊 [SESSION] Using existing progress for profile:', profileId);
+        setCurrentExerciseIndex(existingProgress.currentExerciseIndex);
+        return;
+      }
+
       const initialProgress: LocalTrainingProgress = {
         exerciseProgress: {},
         currentExerciseIndex: 0,
@@ -61,22 +113,45 @@ export default function SesionEntrenoPage() {
       };
       
       // Initialize progress for each exercise
-      activeSession.exercises.forEach(exercise => {
-        initialProgress.exerciseProgress[exercise.exercise_id] = {
+      activeSession.exercises.forEach((exercise, exerciseIndex) => {
+        console.log(`📋 [SESSION] Exercise ${exerciseIndex + 1}: ${exercise.exercise_name}`, {
+          exerciseId: exercise.exercise_id,
+          plannedSetsCount: exercise.planned_sets.length,
+          plannedSets: exercise.planned_sets.map((set, setIndex) => ({
+            setNumber: setIndex + 1,
+            reps: set.reps,
+            weight: set.weight,
+            rir: set.rir
+          }))
+        });
+
+        const exerciseProgress = {
           exercise_id: exercise.exercise_id,
-          sets: exercise.planned_sets.map(() => ({
-            reps: '',
-            weight: '',
-            rir: '',
-            isCompleted: false
-          })),
+          sets: exercise.planned_sets.map((plannedSet, setIndex) => {
+            const localSet = {
+              reps: plannedSet.reps ? String(plannedSet.reps) : '',
+              weight: plannedSet.weight ? String(plannedSet.weight) : '',
+              rir: plannedSet.rir ? String(plannedSet.rir) : '',
+              isCompleted: !!(plannedSet.reps && plannedSet.weight && plannedSet.reps > 0 && plannedSet.weight > 0)
+            };
+            
+            console.log(`✅ [SESSION] Set ${setIndex + 1} initialized:`, {
+              planned: { reps: plannedSet.reps, weight: plannedSet.weight, rir: plannedSet.rir },
+              local: { reps: localSet.reps, weight: localSet.weight, rir: localSet.rir, isCompleted: localSet.isCompleted }
+            });
+            
+            return localSet;
+          }),
           isCompleted: false
         };
+
+        initialProgress.exerciseProgress[exercise.exercise_id] = exerciseProgress;
       });
       
-      setLocalProgress(initialProgress);
+      updateCurrentProfileProgress(() => initialProgress);
+      console.log('🎯 [SESSION] Local progress initialized for profile:', profileId);
     }
-  }, [activeSession]);
+  }, [activeSession, profileId]);
 
   /* Local state update handler */
   const updateLocalProgress = (
@@ -90,19 +165,23 @@ export default function SesionEntrenoPage() {
     const exercise = activeSession.exercises[exerciseIndex];
     if (!exercise) return;
 
-    setLocalProgress(prev => {
+    updateCurrentProfileProgress(prev => {
       const updatedProgress = { ...prev };
       const exerciseId = exercise.exercise_id;
       
       // Ensure exercise progress exists
       if (!updatedProgress.exerciseProgress[exerciseId]) {
+        console.log(`🔧 [SESSION] Creating missing progress for exercise ${exerciseId}, using planned sets:`, 
+          exercise.planned_sets.map(set => ({ reps: set.reps, weight: set.weight, rir: set.rir }))
+        );
+        
         updatedProgress.exerciseProgress[exerciseId] = {
           exercise_id: exerciseId,
-          sets: exercise.planned_sets.map(() => ({
-            reps: '',
-            weight: '',
-            rir: '',
-            isCompleted: false
+          sets: exercise.planned_sets.map((plannedSet, index) => ({
+            reps: plannedSet.reps ? String(plannedSet.reps) : '',
+            weight: plannedSet.weight ? String(plannedSet.weight) : '',
+            rir: plannedSet.rir ? String(plannedSet.rir) : '',
+            isCompleted: !!(plannedSet.reps && plannedSet.weight && plannedSet.reps > 0 && plannedSet.weight > 0)
           })),
           isCompleted: false
         };
@@ -112,6 +191,13 @@ export default function SesionEntrenoPage() {
       const sets = [...updatedProgress.exerciseProgress[exerciseId].sets];
       const currentSet = { ...sets[setIndex] };
       
+      console.log(`📝 [SESSION] Updating set ${setIndex + 1} for exercise ${exerciseId}:`, {
+        field: key,
+        oldValue: currentSet[key as keyof typeof currentSet],
+        newValue: value,
+        currentSetBefore: { ...currentSet }
+      });
+
       if (key === "reps") {
         currentSet.reps = value as string;
       } else if (key === "weight") {
@@ -124,6 +210,8 @@ export default function SesionEntrenoPage() {
       currentSet.isCompleted = Boolean(
         currentSet.reps && 
         currentSet.weight && 
+        !isNaN(parseFloat(currentSet.reps)) &&
+        !isNaN(parseFloat(currentSet.weight)) &&
         parseFloat(currentSet.reps) > 0 && 
         parseFloat(currentSet.weight) > 0
       );
@@ -143,7 +231,7 @@ export default function SesionEntrenoPage() {
       hasActiveSession: !!activeSession,
       activeSessionId: activeSession?.id,
       activeSessionIdType: typeof activeSession?.id,
-      localProgress,
+      currentProfileProgress: getCurrentProfileProgress(),
       fullActiveSession: activeSession
     });
 
@@ -160,17 +248,21 @@ export default function SesionEntrenoPage() {
       // Convert local progress to API format
       const progressData = [];
       
-      for (const [exerciseIdStr, exerciseProgress] of Object.entries(localProgress.exerciseProgress)) {
+      for (const [exerciseIdStr, exerciseProgress] of Object.entries(getCurrentProfileProgress().exerciseProgress)) {
         const exerciseId = parseInt(exerciseIdStr, 10);
         
         exerciseProgress.sets.forEach((setProgress, setIndex) => {
           if (setProgress.isCompleted) {
+            const repsValue = setProgress.reps && !isNaN(parseInt(setProgress.reps, 10)) ? parseInt(setProgress.reps, 10) : undefined;
+            const weightValue = setProgress.weight && !isNaN(parseFloat(setProgress.weight)) ? parseFloat(setProgress.weight) : undefined;
+            const rirValue = setProgress.rir && !isNaN(parseInt(setProgress.rir, 10)) ? parseInt(setProgress.rir, 10) : undefined;
+            
             progressData.push({
               exercise_id: exerciseId,
               set_number: setIndex + 1,
-              reps: setProgress.reps ? parseInt(setProgress.reps, 10) : undefined,
-              weight: setProgress.weight ? parseFloat(setProgress.weight) : undefined,
-              rir: setProgress.rir ? parseInt(setProgress.rir, 10) : undefined,
+              reps: repsValue,
+              weight: weightValue,
+              rir: rirValue,
               rest_pause_details: setProgress.rp,
               drop_set_details: setProgress.ds,
               partials_details: setProgress.partials,
@@ -213,6 +305,7 @@ export default function SesionEntrenoPage() {
     return (
       <View style={styles.container}>
         <RadialGradientBackground />
+        <ProfileSwitch />
         <View style={styles.centered}>
           <Text style={styles.loadingText}>Cargando sesión...</Text>
         </View>
@@ -224,6 +317,7 @@ export default function SesionEntrenoPage() {
     return (
       <View style={styles.container}>
         <RadialGradientBackground />
+        <ProfileSwitch />
         <View style={styles.centered}>
           <Text style={styles.errorText}>Error al cargar la sesión</Text>
           <Text style={styles.errorSubtext}>{error?.message}</Text>
@@ -236,6 +330,7 @@ export default function SesionEntrenoPage() {
     return (
       <View style={styles.container}>
         <RadialGradientBackground />
+        <ProfileSwitch />
         <View style={styles.centered}>
           <Text style={styles.noSessionTitle}>No hay sesión activa</Text>
           <Text style={styles.noSessionText}>
@@ -250,6 +345,7 @@ export default function SesionEntrenoPage() {
   return (
     <View style={styles.container}>
       <RadialGradientBackground />
+      <ProfileSwitch />
       <ScrollView contentContainerStyle={styles.scrollViewContent}>
         {/* Header with training day name and date */}
         <View style={styles.header}>
@@ -276,7 +372,7 @@ export default function SesionEntrenoPage() {
             <View style={styles.setsContainer}>
               {currentExercise.planned_sets.map((plannedSet, setIndex) => {
                 // Get performed set data from local progress
-                const exerciseProgress = localProgress.exerciseProgress[currentExercise.exercise_id];
+                const exerciseProgress = getCurrentProfileProgress().exerciseProgress[currentExercise.exercise_id];
                 const performedSet = exerciseProgress?.sets[setIndex] || {
                   reps: '',
                   weight: '',
@@ -384,7 +480,7 @@ export default function SesionEntrenoPage() {
             ]}
             disabled={currentExerciseIndex === 0}
             onPress={() =>
-              setCurrentExerciseIndex((prevIndex) => Math.max(prevIndex - 1, 0))
+              updateCurrentExerciseIndex((prevIndex) => Math.max(prevIndex - 1, 0))
             }
             testID="button-previous"
           >
@@ -398,7 +494,7 @@ export default function SesionEntrenoPage() {
             <TouchableOpacity
               style={styles.button}
               onPress={() =>
-                setCurrentExerciseIndex((prevIndex) =>
+                updateCurrentExerciseIndex((prevIndex) =>
                   Math.min(prevIndex + 1, (activeSession.exercises?.length || 1) - 1)
                 )
               }

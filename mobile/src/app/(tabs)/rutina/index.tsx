@@ -36,6 +36,9 @@ const RoutineScreen = () => {
     isDayCompletedToday,
     toggleRestDay,
     removeRoutineFromDay,
+    getCurrentRoutineWeekId,
+    getCurrentRoutineWeekInfo,
+    convertDayOfWeekForTrainingSession,
   } = useWeekSchedule();
 
   /* Training Session Logic */
@@ -43,11 +46,11 @@ const RoutineScreen = () => {
   
   /* Current Day Configuration */
   const currentDay = days[currentDayIndex] || {};
-  const derivedRoutineWeekId = currentDayIndex + 1; // Convert to 1-based index
+  const currentRoutineWeekId = getCurrentRoutineWeekId(); // Get the correct routine week ID
   const { 
     configuration, 
     exercises 
-  } = useRoutineConfiguration(derivedRoutineWeekId, profileId);
+  } = useRoutineConfiguration(currentRoutineWeekId, profileId);
 
   useEffect(() => {
     const loadIcons = async () => {
@@ -118,20 +121,49 @@ const RoutineScreen = () => {
 
       // Verificar que hay ejercicios configurados
       if (!exercises || exercises.length === 0) {
+        console.log('❌ No exercises found for session start:', {
+          currentRoutineWeekId,
+          exercisesArray: exercises,
+          dayName: currentDay.name,
+          trainingDayName: currentDay.trainingDayName
+        });
+        
         Toast.show({
           type: 'error',
-          text1: 'Error',
-          text2: 'No hay ejercicios configurados para este día',
+          text1: 'No hay ejercicios configurados',
+          text2: `Configura ejercicios para ${currentDay.name} antes de iniciar`,
         });
         return;
       }
 
+      // Verificar que tenemos información de rutina válida
+      const currentRoutineInfo = getCurrentRoutineWeekInfo();
+      if (!currentRoutineInfo) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'No se pudo determinar la rutina para este día',
+        });
+        return;
+      }
+
+      // Convertir day_of_week para training_sessions (que espera 1-7 en lugar de 0-6)
+      const trainingSessionDayOfWeek = convertDayOfWeekForTrainingSession(currentRoutineInfo.day_of_week);
+      
+      console.log('🚀 Iniciando sesión con datos:', {
+        routineWeekId: currentRoutineInfo.id,
+        routineWeekDayOfWeek: currentRoutineInfo.day_of_week,
+        trainingSessionDayOfWeek,
+        dayName: currentRoutineInfo.day_name,
+        exerciseCount: exercises.length
+      });
+
       // Crear nueva sesión usando el backend
       const sessionData: CreateTrainingSessionRequest = {
         profile_id: profileId,
-        routine_week_id: derivedRoutineWeekId,
+        routine_week_id: currentRoutineInfo.id,
         routine_name: currentDay.trainingDayName || 'Rutina',
-        day_of_week: derivedRoutineWeekId,
+        day_of_week: trainingSessionDayOfWeek, // Usar el formato correcto para training_sessions
         day_name: currentDay.name,
         exercises: exercises.map((exercise, index) => ({
           exercise_id: exercise.exercise_id,
@@ -162,7 +194,8 @@ const RoutineScreen = () => {
 
   /* Derived State */
   const isCurrentDayCompletedToday = isDayCompletedToday(currentDay);
-  const isSessionDisabled = isCurrentDayCompletedToday || !currentDay?.trainingDayName;
+  const hasExercisesConfigured = exercises && exercises.length > 0;
+  const isSessionDisabled = isCurrentDayCompletedToday || !currentDay?.trainingDayName || !hasExercisesConfigured;
 
   /* Debug logging for completion status */
   useEffect(() => {
@@ -199,11 +232,13 @@ const RoutineScreen = () => {
     ? "Día de descanso"
     : !currentDay?.trainingDayName
       ? "No hay entrenamiento asignado"
-      : isCurrentDayCompletedToday
-        ? "Sesión finalizada"
-        : activeSession
-          ? "Continuar sesión"
-          : "Empezar sesión";
+      : !hasExercisesConfigured
+        ? "No hay ejercicios configurados"
+        : isCurrentDayCompletedToday
+          ? "Sesión finalizada"
+          : activeSession
+            ? "Continuar sesión"
+            : "Empezar sesión";
 
   /* Menu Options */
   const options = (day: Day) => [
