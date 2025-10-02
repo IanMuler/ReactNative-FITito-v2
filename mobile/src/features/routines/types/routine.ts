@@ -31,13 +31,12 @@ export interface ExerciseDetail {
   image: string;
 }
 
-// Day of week configuration 
+// Day of week configuration
 export interface Day {
   name: string;
   rest: boolean;
   trainingDayName?: string;
   exerciseDetails?: ExerciseDetail[];
-  completedDate?: string; // Format: YYYY-MM-DD
 }
 
 // Routine week configuration (matches backend unified schema)
@@ -51,7 +50,6 @@ export interface RoutineWeek {
   routine_name?: string; // Name of the routine assigned to this day
   training_day_id?: number; // Optional reference to training day template
   exercises_config: ExerciseConfig[]; // Unified exercises configuration
-  completed_date?: string;
   has_configuration: boolean; // Whether this day has exercises configured
   created_at: string;
   updated_at: string;
@@ -153,7 +151,6 @@ export interface CreateWorkoutSessionDto {
 export interface UpdateRoutineWeekDto {
   is_rest_day?: boolean;
   routine_id?: number;
-  completed_date?: string;
 }
 
 // History entry for completed sessions

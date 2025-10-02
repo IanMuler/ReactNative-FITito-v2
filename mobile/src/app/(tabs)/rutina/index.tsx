@@ -17,7 +17,7 @@ import { useWeekSchedule } from "@/features/routines/hooks";
 import type { Day } from "@/features/routines/types";
 import { useProfile } from '@/features/profile';
 import Toast from 'react-native-toast-message';
-import { useTrainingSession } from '@/features/training-sessions/hooks/useTrainingSession';
+import { useTrainingSession, useSessionHistoryByWeek } from '@/features/training-sessions/hooks';
 import { useRoutineConfiguration } from '@/features/routine-configurations';
 import { CreateTrainingSessionRequest } from '@/features/training-sessions/types';
 import { TrainingSessionAsyncStorage } from '@/features/training-sessions/services/asyncStorageService';
@@ -37,7 +37,6 @@ const RoutineScreen = () => {
     month,
     year,
     isLoading,
-    isDayCompletedToday,
     toggleRestDay,
     removeRoutineFromDay,
     getCurrentRoutineWeekId,
@@ -47,6 +46,9 @@ const RoutineScreen = () => {
 
   /* Training Session Logic */
   const { activeSession, createSession, cancelSession, isLoading: isSessionLoading } = useTrainingSession(profileId);
+
+  /* Session History for Week */
+  const { sessionHistoryMap, weekDates } = useSessionHistoryByWeek(profileId);
   
   /* Current Day Configuration */
   const currentDay = days[currentDayIndex] || {};
@@ -93,14 +95,19 @@ const RoutineScreen = () => {
   };
 
   const handleDayPress = (dayIndex: number) => {
-    if (isDayCompletedToday(days[dayIndex])) {
-      const date = new Date();
-      date.setDate(date.getDate() - (currentDayIndex - dayIndex));
+    // Get the date for the clicked day from the week dates
+    const date = weekDates[dayIndex];
+
+    // Check if there's a session history for this date
+    if (sessionHistoryMap.has(date)) {
+      // Convert date from YYYY-MM-DD to DD/MM/YYYY for historico screen
+      const [year, month, day] = date.split('-');
+      const formattedDate = `${day}/${month}/${year}`;
 
       router.push({
         pathname: "/(tabs)/rutina/historico",
         params: {
-          date: date.toLocaleDateString(),
+          date: formattedDate, // DD/MM/YYYY format expected by historico
         },
       });
     }
@@ -360,54 +367,59 @@ const RoutineScreen = () => {
     }
   };
 
+  /* Helper to check if a day has session history */
+  const hasDaySessionHistory = (dayIndex: number): boolean => {
+    const date = weekDates[dayIndex];
+    return sessionHistoryMap.has(date);
+  };
+
   /* Derived State */
-  const isCurrentDayCompletedToday = isDayCompletedToday(currentDay);
+  const isCurrentDayCompletedToday = hasDaySessionHistory(currentDayIndex);
   const hasExercisesConfigured = exercises && exercises.length > 0;
   const isSessionDisabled = isCurrentDayCompletedToday || !currentDay?.trainingDayName || !hasExercisesConfigured;
 
   /* Debug button state */
-  useEffect(() => {
-    console.log('🔘 [Button State]:', {
-      isSessionDisabled,
-      isCurrentDayCompletedToday,
-      hasTrainingDay: !!currentDay?.trainingDayName,
-      trainingDayName: currentDay?.trainingDayName,
-      hasExercisesConfigured,
-      exercisesCount: exercises?.length || 0,
-      activeSession: !!activeSession
-    });
-  }, [isSessionDisabled, isCurrentDayCompletedToday, currentDay?.trainingDayName, hasExercisesConfigured, exercises?.length, activeSession]);
+  // useEffect(() => {
+  //   console.log('🔘 [Button State]:', {
+  //     isSessionDisabled,
+  //     isCurrentDayCompletedToday,
+  //     hasTrainingDay: !!currentDay?.trainingDayName,
+  //     trainingDayName: currentDay?.trainingDayName,
+  //     hasExercisesConfigured,
+  //     exercisesCount: exercises?.length || 0,
+  //     activeSession: !!activeSession
+  //   });
+  // }, [isSessionDisabled, isCurrentDayCompletedToday, currentDay?.trainingDayName, hasExercisesConfigured, exercises?.length, activeSession]);
 
   /* Debug logging for completion status */
-  useEffect(() => {
-    if (days.length > 0) {
-      const today = new Date().toISOString().split('T')[0];
-      console.log('🔍 [Rutina Index] Debug completion status:', {
-        today,
-        currentDayIndex,
-        totalDays: days.length,
-      });
-      
-      days.forEach((day, index) => {
-        const isCompleted = isDayCompletedToday(day);
-        console.log(`📅 [Rutina Index] Day ${index} (${day.name}):`, {
-          completedDate: day.completedDate,
-          today,
-          matches: day.completedDate === today,
-          isCompleted,
-          rest: day.rest,
-          trainingDayName: day.trainingDayName,
-        });
-      });
-      
-      console.log('🎯 [Rutina Index] Current day status:', {
-        currentDay: currentDay.name,
-        isCurrentDayCompletedToday,
-        isSessionDisabled,
-        activeSession: !!activeSession,
-      });
-    }
-  }, [days, currentDayIndex, isDayCompletedToday, currentDay, isCurrentDayCompletedToday, isSessionDisabled, activeSession]);
+  // useEffect(() => {
+  //   if (days.length > 0) {
+  //     const today = new Date().toISOString().split('T')[0];
+  //     console.log('🔍 [Rutina Index] Debug completion status:', {
+  //       today,
+  //       currentDayIndex,
+  //       totalDays: days.length,
+  //     });
+  //
+  //     days.forEach((day, index) => {
+  //       const hasHistory = hasDaySessionHistory(index);
+  //       const date = weekDates[index];
+  //       console.log(`📅 [Rutina Index] Day ${index} (${day.name}):`, {
+  //         date,
+  //         hasHistory,
+  //         rest: day.rest,
+  //         trainingDayName: day.trainingDayName,
+  //       });
+  //     });
+  //
+  //     console.log('🎯 [Rutina Index] Current day status:', {
+  //       currentDay: currentDay.name,
+  //       isCurrentDayCompletedToday,
+  //       isSessionDisabled,
+  //       activeSession: !!activeSession,
+  //     });
+  //   }
+  // }, [days, currentDayIndex, weekDates, sessionHistoryMap, currentDay, isCurrentDayCompletedToday, isSessionDisabled, activeSession]);
 
   const ButtonText = currentDay.rest
     ? "Día de descanso"
@@ -539,7 +551,7 @@ const RoutineScreen = () => {
                 )}
               </View>
               <View style={{ flexDirection: "row", gap: 10 }}>
-                {isDayCompletedToday(day) && (
+                {hasDaySessionHistory(index) && (
                   <TouchableOpacity onPress={() => handleDayPress(index)} testID={`day-completed-${day.name}`}>
                     <Ionicons name={"book"} size={24} color="#FFFFFF" />
                   </TouchableOpacity>

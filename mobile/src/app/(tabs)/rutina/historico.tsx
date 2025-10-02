@@ -4,15 +4,21 @@ import { useLocalSearchParams } from "expo-router";
 import { DAY_NAMES } from "@/features/routines/types";
 import { useLegacyHistory, HistoryExerciseCard } from "@/features/workout-history-legacy";
 import RadialGradientBackground from "@/components/ui/RadialGradientBackground";
+import { useProfile } from "@/features/profile";
 
 const HistoricoScreen = () => {
   /* Constants */
   const { date } = useLocalSearchParams<{ date: string }>(); // formato: DD/MM/YYYY
-  const profileId = 1; // TODO: Get from profile context
+  const { profileId } = useProfile();
 
   /* Parse date */
-  const parsedDate = date ? new Date(date.split('/').reverse().join('-')) : new Date();
-  const dayName = DAY_NAMES[parsedDate.getDay()];
+  const parsedDate = date
+    ? (() => {
+        const [day, month, year] = date.split('/').map(Number);
+        return new Date(year, month - 1, day); // month-1 porque enero es 0
+      })()
+    : new Date();
+  const dayName = DAY_NAMES[parsedDate.getDay() === 0 ? 6 : parsedDate.getDay() - 1];
 
   /* Check if date is today */
   const today = new Date();
@@ -27,15 +33,20 @@ const HistoricoScreen = () => {
     isLoading,
     error,
     refetch,
-    deleteTodayHistory,
+    deleteHistory,
     isDeleting
   } = useLegacyHistory(profileId, date || "");
 
   /* Handlers */
   const handleDeleteHistory = () => {
+    const alertTitle = isToday ? "Borrar histórico de hoy" : "Borrar histórico";
+    const alertMessage = isToday
+      ? "¿Estás seguro de que quieres eliminar el histórico de hoy? Esta acción no se puede deshacer."
+      : `¿Estás seguro de que quieres eliminar el histórico del ${date}? Esta acción no se puede deshacer.`;
+
     Alert.alert(
-      "Borrar histórico de hoy",
-      "¿Estás seguro de que quieres eliminar el histórico de hoy? Esta acción no se puede deshacer.",
+      alertTitle,
+      alertMessage,
       [
         {
           text: "Cancelar",
@@ -46,7 +57,7 @@ const HistoricoScreen = () => {
           style: "destructive",
           onPress: () => {
             if (date) {
-              deleteTodayHistory(date);
+              deleteHistory(date);
             }
           }
         }
@@ -98,11 +109,26 @@ const HistoricoScreen = () => {
 
   /* Check if we have exercises to display */
   const hasExercises = dayHistory && dayHistory.length > 0 && dayHistory[0]?.exerciseDetails?.length > 0;
+  const hasHistoryRecord = dayHistory && dayHistory.length > 0;
 
   if (!hasExercises) return (
     <View style={styles.container}>
       <RadialGradientBackground />
-      <Text style={styles.title}>Histórico de {dayName} {date}</Text>
+      <View style={styles.headerContainer}>
+        <Text style={styles.title}>Histórico de {dayName} {date}</Text>
+
+        {hasHistoryRecord && (
+          <TouchableOpacity
+            style={[styles.deleteButton, isDeleting && styles.deleteButtonDisabled]}
+            onPress={handleDeleteHistory}
+            disabled={isDeleting}
+          >
+            <Text style={styles.deleteButtonText}>
+              {isDeleting ? 'Borrando...' : isToday ? '🗑️ Borrar histórico de hoy' : '🗑️ Borrar histórico'}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
       {EmptyState}
     </View>
   );
@@ -125,14 +151,14 @@ const HistoricoScreen = () => {
             Histórico de {dayName} {date}
           </Text>
 
-          {isToday && hasExercises && (
+          {hasExercises && (
             <TouchableOpacity
               style={[styles.deleteButton, isDeleting && styles.deleteButtonDisabled]}
               onPress={handleDeleteHistory}
               disabled={isDeleting}
             >
               <Text style={styles.deleteButtonText}>
-                {isDeleting ? 'Borrando...' : '🗑️ Borrar histórico de hoy'}
+                {isDeleting ? 'Borrando...' : isToday ? '🗑️ Borrar histórico de hoy' : '🗑️ Borrar histórico'}
               </Text>
             </TouchableOpacity>
           )}

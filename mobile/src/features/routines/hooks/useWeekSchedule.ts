@@ -18,17 +18,17 @@ export const useWeekSchedule = () => {
   } = useQuery({
     queryKey: ['routine-weeks', profileId],
     queryFn: () => {
-      console.log('🔄 Fetching routine weeks for profileId:', profileId);
+      // console.log('🔄 Fetching routine weeks for profileId:', profileId);
       return routineApi.getWeekSchedule(profileId);
     },
     enabled: !!profileId,
     staleTime: 5 * 60 * 1000, // 5 minutes
-    onSuccess: (data) => {
-      console.log('✅ Routine weeks loaded:', data);
-      data.forEach((week, index) => {
-        console.log(`📅 Day ${index + 1}: ${week.day_name} - ID: ${week.id} - Routine: ${week.routine_id} - Rest: ${week.is_rest_day}`);
-      });
-    },
+    // onSuccess: (data) => {
+    //   console.log('✅ Routine weeks loaded:', data);
+    //   data.forEach((week, index) => {
+    //     console.log(`📅 Day ${index + 1}: ${week.day_name} - ID: ${week.id} - Routine: ${week.routine_id} - Rest: ${week.is_rest_day}`);
+    //   });
+    // },
     onError: (error) => {
       console.error('❌ Error loading routine weeks:', error);
     }
@@ -57,20 +57,20 @@ export const useWeekSchedule = () => {
     mutationFn: ({ routineWeekId, update }: { routineWeekId: number, update: any }) =>
       routineApi.updateRoutineWeek(routineWeekId, update),
     onSuccess: (data, variables: { routineWeekId: number, update: any, operationType?: string }) => {
-      console.log('✅ UpdateWeekMutation success:', {
-        operationType: variables.operationType,
-        routineWeekId: variables.routineWeekId,
-        update: variables.update,
-        response: data
-      });
-      
-      console.log('🔄 Invalidating queries with key:', ['routine-weeks', profileId]);
+      // console.log('✅ UpdateWeekMutation success:', {
+      //   operationType: variables.operationType,
+      //   routineWeekId: variables.routineWeekId,
+      //   update: variables.update,
+      //   response: data
+      // });
+
+      // console.log('🔄 Invalidating queries with key:', ['routine-weeks', profileId]);
       queryClient.invalidateQueries({ queryKey: ['routine-weeks', profileId] });
       
       // Show success toast based on operation type
       const { operationType } = variables;
       let successMessage = 'Día actualizado correctamente';
-      
+
       switch (operationType) {
         case 'remove':
           successMessage = 'Día de entreno eliminado correctamente';
@@ -80,9 +80,6 @@ export const useWeekSchedule = () => {
           break;
         case 'toggle':
           successMessage = 'Día de descanso actualizado';
-          break;
-        case 'complete':
-          successMessage = 'Día marcado como completado';
           break;
       }
       
@@ -119,7 +116,6 @@ export const useWeekSchedule = () => {
       trainingDayName: routineWeek.routine_name || (
         routineWeek.routine_id ? `Rutina ${routineWeek.routine_id}` : undefined
       ),
-      completedDate: routineWeek.completed_date,
     }));
   }, [routineWeeks]);
 
@@ -139,17 +135,6 @@ export const useWeekSchedule = () => {
     const today = new Date();
     return today.toISOString().split('T')[0];
   };
-
-  const isDayCompletedToday = useCallback((day: Day) => {
-    if (!day.completedDate) return false;
-    
-    // Handle both ISO timestamp and date string formats
-    const completedDateStr = typeof day.completedDate === 'string' 
-      ? day.completedDate.split('T')[0]  // Extract date part from ISO timestamp
-      : day.completedDate;
-    
-    return completedDateStr === getTodayString();
-  }, []);
 
   /* Actions */
   const toggleRestDay = useCallback(async (day: Day) => {
@@ -227,22 +212,6 @@ export const useWeekSchedule = () => {
     }
   }, [routineWeeks, profileId, queryClient]);
 
-  const markDayCompleted = useCallback(async (dayName: string) => {
-    const routineWeek = routineWeeks.find(rw => rw.day_name === dayName);
-    if (!routineWeek) return;
-
-    const completedDate = getTodayString();
-    
-    updateWeekMutation.mutate({
-      routineWeekId: routineWeek.id,
-      update: {
-        completed_date: completedDate,
-        profile_id: profileId,
-      },
-      operationType: 'complete'
-    });
-  }, [routineWeeks, updateWeekMutation, profileId]);
-
   /* Initialize schedule if empty */
   useEffect(() => {
     if (profileId && !isLoading && !routineWeeks.length && !error) {
@@ -262,13 +231,13 @@ export const useWeekSchedule = () => {
     // Find the routine week that matches this day_of_week
     const routineWeek = routineWeeks.find(rw => rw.day_of_week === backendDayOfWeek);
     
-    console.log('🗓️ getCurrentRoutineWeekInfo:', {
-      currentDayIndex,
-      backendDayOfWeek,
-      routineWeekId: routineWeek?.id,
-      dayName: routineWeek?.day_name,
-      hasExercises: routineWeek ? (routineWeek.exercises_config?.length || 0) > 0 : false
-    });
+    // console.log('🗓️ getCurrentRoutineWeekInfo:', {
+    //   currentDayIndex,
+    //   backendDayOfWeek,
+    //   routineWeekId: routineWeek?.id,
+    //   dayName: routineWeek?.day_name,
+    //   hasExercises: routineWeek ? (routineWeek.exercises_config?.length || 0) > 0 : false
+    // });
     
     return routineWeek ? {
       id: routineWeek.id,
@@ -303,25 +272,23 @@ export const useWeekSchedule = () => {
     month,
     year,
     routineWeeks, // Add raw routine weeks data
-    
+
     // States
     isLoading: isLoading || initializeMutation.isPending,
     error,
     isUpdating: updateWeekMutation.isPending,
-    
+
     // Helpers
     getTodayString,
-    isDayCompletedToday,
     getCurrentRoutineWeekId,
     getCurrentRoutineWeekInfo,
     convertDayOfWeekForTrainingSession,
-    
+
     // Actions
     toggleRestDay,
     assignRoutineToDay,
     assignTrainingDayToDay,
     removeRoutineFromDay,
-    markDayCompleted,
     initializeSchedule: () => initializeMutation.mutate(),
   };
 };

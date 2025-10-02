@@ -23,6 +23,35 @@ pool.on('error', (err) => {
   process.exit(-1);
 });
 
-export const query = (text: string, params?: any[]) => pool.query(text, params);
+/**
+ * Execute a query using the pool
+ */
+export const query = async <T = any>(text: string, params?: any[]): Promise<{ rows: T[]; rowCount: number }> => {
+  const result = await pool.query(text, params);
+  return result as { rows: T[]; rowCount: number };
+};
+
+/**
+ * Get a client from the pool for transactions
+ */
+export const getClient = () => pool.connect();
+
+/**
+ * Execute queries in a transaction
+ */
+export const transaction = async <T>(callback: (client: any) => Promise<T>): Promise<T> => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
 
 export default pool;

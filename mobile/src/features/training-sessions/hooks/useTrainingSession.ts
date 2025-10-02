@@ -75,11 +75,11 @@ export const useTrainingSession = (profileId?: number) => {
       const newSession = await TrainingSessionAsyncStorage.createSession(request);
       setActiveSession(newSession);
 
-      console.log('✅ [useTrainingSession] Created new session:', {
-        id: newSession.id,
-        routine_name: newSession.routine_name,
-        exercises_count: newSession.exercises.length
-      });
+      // console.log('✅ [useTrainingSession] Created new session:', {
+      //   id: newSession.id,
+      //   routine_name: newSession.routine_name,
+      //   exercises_count: newSession.exercises.length
+      // });
 
       return newSession;
     } catch (err) {
@@ -108,10 +108,10 @@ export const useTrainingSession = (profileId?: number) => {
       const updatedSession = await TrainingSessionAsyncStorage.updateSetProgress(request, profileId);
       setActiveSession(updatedSession);
 
-      console.log('✅ [useTrainingSession] Updated set progress:', {
-        exercise_id: request.exercise_id,
-        set_number: request.set_number
-      });
+      // console.log('✅ [useTrainingSession] Updated set progress:', {
+      //   exercise_id: request.exercise_id,
+      //   set_number: request.set_number
+      // });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to update set progress';
       console.error('❌ Error updating set progress:', errorMessage);
@@ -136,9 +136,9 @@ export const useTrainingSession = (profileId?: number) => {
       const updatedSession = await TrainingSessionAsyncStorage.moveToNextExercise(activeSession.id, profileId);
       setActiveSession(updatedSession);
 
-      console.log('✅ [useTrainingSession] Moved to next exercise:', {
-        current_index: updatedSession.current_exercise_index
-      });
+      // console.log('✅ [useTrainingSession] Moved to next exercise:', {
+      //   current_index: updatedSession.current_exercise_index
+      // });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to move to next exercise';
       console.error('❌ Error moving to next exercise:', errorMessage);
@@ -163,9 +163,9 @@ export const useTrainingSession = (profileId?: number) => {
       const updatedSession = await TrainingSessionAsyncStorage.moveToPreviousExercise(activeSession.id, profileId);
       setActiveSession(updatedSession);
 
-      console.log('✅ [useTrainingSession] Moved to previous exercise:', {
-        current_index: updatedSession.current_exercise_index
-      });
+      // console.log('✅ [useTrainingSession] Moved to previous exercise:', {
+      //   current_index: updatedSession.current_exercise_index
+      // });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to move to previous exercise';
       console.error('❌ Error moving to previous exercise:', errorMessage);
@@ -197,10 +197,10 @@ export const useTrainingSession = (profileId?: number) => {
         text2: '¡Excelente entrenamiento!',
       });
 
-      console.log('✅ [useTrainingSession] Session completed:', {
-        id: activeSession.id,
-        routine_name: activeSession.routine_name
-      });
+      // console.log('✅ [useTrainingSession] Session completed:', {
+      //   id: activeSession.id,
+      //   routine_name: activeSession.routine_name
+      // });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to complete session';
       console.error('❌ Error completing session:', errorMessage);
@@ -241,10 +241,10 @@ export const useTrainingSession = (profileId?: number) => {
         text2: 'La sesión ha sido cancelada',
       });
 
-      console.log('✅ [useTrainingSession] Session cancelled:', {
-        id: activeSession.id,
-        routine_name: activeSession.routine_name
-      });
+      // console.log('✅ [useTrainingSession] Session cancelled:', {
+      //   id: activeSession.id,
+      //   routine_name: activeSession.routine_name
+      // });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to cancel session';
       console.error('❌ Error cancelling session:', errorMessage);
@@ -283,9 +283,9 @@ export const useTrainingSession = (profileId?: number) => {
         text1: 'Sesión pausada',
       });
 
-      console.log('✅ [useTrainingSession] Session paused:', {
-        id: activeSession.id
-      });
+      // console.log('✅ [useTrainingSession] Session paused:', {
+      //   id: activeSession.id
+      // });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to pause session';
       console.error('❌ Error pausing session:', errorMessage);
@@ -315,9 +315,9 @@ export const useTrainingSession = (profileId?: number) => {
         text1: 'Sesión reanudada',
       });
 
-      console.log('✅ [useTrainingSession] Session resumed:', {
-        id: activeSession.id
-      });
+      // console.log('✅ [useTrainingSession] Session resumed:', {
+      //   id: activeSession.id
+      // });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to resume session';
       console.error('❌ Error resuming session:', errorMessage);

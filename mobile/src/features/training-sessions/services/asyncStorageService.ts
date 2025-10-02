@@ -23,15 +23,15 @@ export class TrainingSessionAsyncStorage {
       if (!sessionData) return null;
 
       const session = JSON.parse(sessionData) as TrainingSession;
-      console.log('📱 [AsyncStorage] Retrieved active session:', {
-        id: session.id,
-        profile_id: session.profile_id,
-        routine_name: session.routine_name,
-        day_name: session.day_name,
-        status: session.status,
-        exercises_count: session.exercises.length,
-        current_exercise_index: session.current_exercise_index
-      });
+      // console.log('📱 [AsyncStorage] Retrieved active session:', {
+      //   id: session.id,
+      //   profile_id: session.profile_id,
+      //   routine_name: session.routine_name,
+      //   day_name: session.day_name,
+      //   status: session.status,
+      //   exercises_count: session.exercises.length,
+      //   current_exercise_index: session.current_exercise_index
+      // });
 
       return session;
     } catch (error) {
@@ -58,27 +58,39 @@ export class TrainingSessionAsyncStorage {
         last_activity: now,
         created_at: now,
         updated_at: now,
-        exercises: request.exercises.map((exercise, index) => ({
-          id: this.generateExerciseId(),
-          exercise_id: exercise.exercise_id,
-          exercise_name: exercise.exercise_name,
-          exercise_image: exercise.exercise_image,
-          order_in_session: index + 1,
-          sets_config: exercise.sets_config,
-          performed_sets: [],
-          is_completed: false,
-        })),
+        exercises: request.exercises.map((exercise, index) => {
+          const performedSets = exercise.sets_config.map((setConfig, setIndex) => ({
+            set_number: setIndex + 1,
+            reps: setConfig.reps ? parseInt(setConfig.reps) : undefined,
+            weight: setConfig.weight ? parseFloat(setConfig.weight) : undefined,
+            rir: setConfig.rir ? parseInt(setConfig.rir) : undefined,
+            rest_pause_details: setConfig.rp,
+            drop_set_details: setConfig.ds,
+            partials_details: setConfig.partials,
+          }));
+
+          return {
+            id: this.generateExerciseId(),
+            exercise_id: exercise.exercise_id,
+            exercise_name: exercise.exercise_name,
+            exercise_image: exercise.exercise_image,
+            order_in_session: index + 1,
+            sets_config: exercise.sets_config,
+            performed_sets: performedSets,
+            is_completed: false,
+          };
+        }),
       };
 
       await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_SESSION(session.profile_id), JSON.stringify(session));
-      
-      console.log('✅ [AsyncStorage] Created new training session:', {
-        id: session.id,
-        routine_name: session.routine_name,
-        day_name: session.day_name,
-        exercises_count: session.exercises.length
-      });
-      
+
+      // console.log('✅ [AsyncStorage] Created new training session:', {
+      //   id: session.id,
+      //   routine_name: session.routine_name,
+      //   day_name: session.day_name,
+      //   exercises_count: session.exercises.length
+      // });
+
       return session;
     } catch (error) {
       console.error('❌ Error creating session in AsyncStorage:', error);
@@ -102,13 +114,13 @@ export class TrainingSessionAsyncStorage {
       };
 
       await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_SESSION(profileId), JSON.stringify(updatedSession));
-      
-      console.log('✅ [AsyncStorage] Updated session:', {
-        id: updatedSession.id,
-        status: updatedSession.status,
-        current_exercise_index: updatedSession.current_exercise_index
-      });
-      
+
+      // console.log('✅ [AsyncStorage] Updated session:', {
+      //   id: updatedSession.id,
+      //   status: updatedSession.status,
+      //   current_exercise_index: updatedSession.current_exercise_index
+      // });
+
       return updatedSession;
     } catch (error) {
       console.error('❌ Error updating session in AsyncStorage:', error);
@@ -159,12 +171,12 @@ export class TrainingSessionAsyncStorage {
         exercises: activeSession.exercises,
       });
 
-      console.log('✅ [AsyncStorage] Updated set progress:', {
-        exercise_name: exercise.exercise_name,
-        set_number: request.set_number,
-        reps: request.reps,
-        weight: request.weight
-      });
+      // console.log('✅ [AsyncStorage] Updated set progress:', {
+      //   exercise_name: exercise.exercise_name,
+      //   set_number: request.set_number,
+      //   reps: request.reps,
+      //   weight: request.weight
+      // });
 
       return updatedSession;
     } catch (error) {
@@ -260,10 +272,10 @@ export class TrainingSessionAsyncStorage {
       // Simply clear the active session for this profile - cancelled sessions are not saved anywhere
       await AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_SESSION(profileId));
 
-      console.log('✅ [AsyncStorage] Session cancelled and removed:', {
-        id: activeSession.id,
-        routine_name: activeSession.routine_name
-      });
+      // console.log('✅ [AsyncStorage] Session cancelled and removed:', {
+      //   id: activeSession.id,
+      //   routine_name: activeSession.routine_name
+      // });
     } catch (error) {
       console.error('❌ Error cancelling session in AsyncStorage:', error);
       throw new Error('Failed to cancel training session');
@@ -299,7 +311,7 @@ export class TrainingSessionAsyncStorage {
   static async clearAllData(): Promise<void> {
     try {
       await AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_SESSION);
-      console.log('✅ [AsyncStorage] Cleared all training session data');
+      // console.log('✅ [AsyncStorage] Cleared all training session data');
     } catch (error) {
       console.error('❌ Error clearing AsyncStorage data:', error);
     }

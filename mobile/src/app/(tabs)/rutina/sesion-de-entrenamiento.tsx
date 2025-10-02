@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import { RadialGradientBackground } from '@/components';
 import NumberInput from '@/components/ui/NumberInput';
@@ -8,15 +9,19 @@ import { useProfile } from '@/features/profile';
 import { ProfileSwitch } from '@/features/profile/components';
 import { useTrainingSession } from '@/features/training-sessions/hooks/useTrainingSession';
 import { UpdateSetProgressRequest } from '@/features/training-sessions/types';
+import { TrainingSessionAsyncStorage } from '@/features/training-sessions/services/asyncStorageService';
 
 export default function SesionEntrenoPage() {
   const router = useRouter();
-  const { profileId } = useProfile();
+  const { profileId, profiles } = useProfile();
+  const queryClient = useQueryClient();
 
   /* State */
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [sessionInputs, setSessionInputs] = useState<{[key: string]: string}>({});
   const [hasCheckedSession, setHasCheckedSession] = useState(false);
+  const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false);
+  const [hasJustCompleted, setHasJustCompleted] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   /* Training Session Hook */
@@ -33,26 +38,27 @@ export default function SesionEntrenoPage() {
     isLoading,
   } = useTrainingSession(profileId);
 
-  /* Redirect if no active session (with debounce to avoid race condition) */
+  /* Track when initial load completes */
   useEffect(() => {
-    if (!isLoading) {
+    if (!isLoading && !hasInitiallyLoaded) {
+      setHasInitiallyLoaded(true);
+    }
+  }, [isLoading, hasInitiallyLoaded]);
+
+  /* Redirect if no active session */
+  useEffect(() => {
+    if (!isLoading && hasInitiallyLoaded && !hasJustCompleted) {
       if (!activeSession && !hasCheckedSession) {
         setHasCheckedSession(true);
-        const timeout = setTimeout(() => {
-          if (!activeSession) {
-            console.log('⚠️ No active session found, redirecting...');
-            Toast.show({
-              type: 'info',
-              text1: 'No hay sesión activa',
-              text2: 'Regresando a rutina...',
-            });
-            router.replace('/rutina');
-          }
-        }, 100);
-        return () => clearTimeout(timeout);
+        Toast.show({
+          type: 'info',
+          text1: 'No hay sesión activa',
+          text2: 'Regresando a rutina...',
+        });
+        router.replace('/rutina');
       }
     }
-  }, [activeSession, isLoading, router, hasCheckedSession]);
+  }, [activeSession, isLoading, router, hasCheckedSession, hasInitiallyLoaded, hasJustCompleted, profileId]);
 
   /* Update current exercise index when session changes */
   useEffect(() => {
@@ -60,6 +66,32 @@ export default function SesionEntrenoPage() {
       setCurrentExerciseIndex(activeSession.current_exercise_index || 0);
     }
   }, [activeSession]);
+
+  /* Initialize inputs with performed_sets values when exercise changes */
+  useEffect(() => {
+    if (currentExercise && activeSession) {
+      const newInputs: {[key: string]: string} = {};
+
+      currentExercise.performed_sets.forEach((performedSet) => {
+        const repsKey = `reps_${currentExercise.exercise_id}_${performedSet.set_number}`;
+        const weightKey = `weight_${currentExercise.exercise_id}_${performedSet.set_number}`;
+        const rirKey = `rir_${currentExercise.exercise_id}_${performedSet.set_number}`;
+
+        if (performedSet.reps !== undefined) newInputs[repsKey] = String(performedSet.reps);
+        if (performedSet.weight !== undefined) newInputs[weightKey] = String(performedSet.weight);
+        if (performedSet.rir !== undefined) newInputs[rirKey] = String(performedSet.rir);
+      });
+
+      setSessionInputs(newInputs);
+    }
+  }, [currentExercise, activeSession]);
+
+  /* Reset check flags when profile changes */
+  useEffect(() => {
+    setHasCheckedSession(false);
+    setHasInitiallyLoaded(false);
+    setHasJustCompleted(false);
+  }, [profileId]);
 
   /* Handlers */
   const handleCancelSession = () => {
@@ -87,80 +119,172 @@ export default function SesionEntrenoPage() {
     );
   };
 
+  const completeSingleSession = async () => {
+    try {
+      setIsSaving(true);
+
+      // Performed sets are already saved automatically when inputs change
+      await completeSession();
+
+      // Mark session as completed to prevent redirect
+      setHasJustCompleted(true);
+
+      // Invalidate session history queries to update icons in rutina index
+      queryClient.invalidateQueries({ queryKey: ['session-history'] });
+      queryClient.invalidateQueries({ queryKey: ['legacy-workout-history-v2'] });
+
+      Toast.show({
+        type: 'success',
+        text1: 'Sesión guardada en histórico',
+        text2: '¡Excelente entrenamiento!',
+      });
+      router.replace('/rutina');
+    } catch (error) {
+      console.error('Error completing session:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'No se pudo completar la sesión',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const completeBothSessions = async (otherProfileId: number) => {
+    try {
+      setIsSaving(true);
+
+      // Completar sesión del perfil actual
+      await completeSession();
+
+      // Obtener y completar sesión del otro perfil
+      const otherSession = await TrainingSessionAsyncStorage.getActiveSession(otherProfileId);
+      if (otherSession) {
+        await TrainingSessionAsyncStorage.completeSession(otherSession.id, otherProfileId);
+      }
+
+      setHasJustCompleted(true);
+      queryClient.invalidateQueries({ queryKey: ['session-history'] });
+      queryClient.invalidateQueries({ queryKey: ['legacy-workout-history-v2'] });
+
+      Toast.show({
+        type: 'success',
+        text1: 'Sesiones finalizadas',
+        text2: '¡Ambos perfiles completaron su entrenamiento!',
+      });
+      router.replace('/rutina');
+    } catch (error) {
+      console.error('Error completing both sessions:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'No se pudo completar las sesiones',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleCompleteSession = async () => {
-    Alert.alert(
-      'Finalizar sesión',
-      '¿Quieres finalizar la sesión de entrenamiento?',
-      [
-        {
-          text: 'Continuar entrenando',
-          style: 'cancel',
-        },
-        {
-          text: 'Finalizar',
-          style: 'default',
-          onPress: async () => {
-            try {
-              setIsSaving(true);
+    // Verificar si el otro perfil también tiene sesión activa
+    const otherProfile = profiles.find(p => p.id !== profileId);
+    let otherProfileHasActiveSession = false;
 
-              // Save all performed sets from session inputs
-              if (activeSession) {
-                for (const exercise of activeSession.exercises) {
-                  for (let setIndex = 0; setIndex < exercise.sets_config.length; setIndex++) {
-                    const setNumber = setIndex + 1;
-                    const repsKey = `reps_${exercise.exercise_id}_${setNumber}`;
-                    const weightKey = `weight_${exercise.exercise_id}_${setNumber}`;
-                    const rirKey = `rir_${exercise.exercise_id}_${setNumber}`;
+    if (otherProfile) {
+      try {
+        const otherSession = await TrainingSessionAsyncStorage.getActiveSession(otherProfile.id);
+        if (otherSession) {
+          otherProfileHasActiveSession = true;
+        }
+      } catch (error) {
+        console.error('Error checking other profile session:', error);
+      }
+    }
 
-                    const reps = parseInt(sessionInputs[repsKey] || '0');
-                    const weight = parseFloat(sessionInputs[weightKey] || '0');
-                    const rir = parseInt(sessionInputs[rirKey] || '0');
-
-                    // Only save sets that have data
-                    if (reps > 0 || weight > 0) {
-                      const updateRequest: UpdateSetProgressRequest = {
-                        session_id: activeSession.id,
-                        exercise_id: exercise.exercise_id,
-                        set_number: setNumber,
-                        reps,
-                        weight,
-                        rir,
-                      };
-
-                      await updateSetProgress(updateRequest);
-                    }
-                  }
-                }
-              }
-
-              await completeSession();
-              Toast.show({
-                type: 'success',
-                text1: 'Sesión completada',
-                text2: '¡Excelente entrenamiento!',
-              });
-              router.replace('/rutina');
-            } catch (error) {
-              console.error('Error completing session:', error);
-              Toast.show({
-                type: 'error',
-                text1: 'Error',
-                text2: 'No se pudo completar la sesión',
-              });
-            } finally {
-              setIsSaving(false);
-            }
+    // Si ambos perfiles tienen sesión activa, mostrar opciones
+    if (otherProfileHasActiveSession && otherProfile) {
+      Alert.alert(
+        'Finalizar sesiones',
+        `${otherProfile.display_name || otherProfile.profile_name} también tiene una sesión activa. ¿Quieres finalizar ambas sesiones?`,
+        [
+          {
+            text: 'Solo este perfil',
+            onPress: async () => {
+              await completeSingleSession();
+            },
           },
-        },
-      ]
-    );
+          {
+            text: 'Ambos perfiles',
+            onPress: async () => {
+              await completeBothSessions(otherProfile.id);
+            },
+          },
+          {
+            text: 'Continuar entrenando',
+            style: 'cancel',
+          },
+        ]
+      );
+    } else {
+      // Solo finalizar sesión del perfil actual
+      Alert.alert(
+        'Finalizar sesión',
+        '¿Quieres finalizar la sesión de entrenamiento?',
+        [
+          {
+            text: 'Continuar entrenando',
+            style: 'cancel',
+          },
+          {
+            text: 'Finalizar',
+            style: 'default',
+            onPress: async () => {
+              await completeSingleSession();
+            },
+          },
+        ]
+      );
+    }
   };
 
   const updateSetInput = (key: string, value: string) => {
+    // Update local state
     setSessionInputs(prev => ({
       ...prev,
       [key]: value,
     }));
+
+    // Extract exercise_id and set_number from key
+    // key format: "reps_123_1" or "weight_123_1" or "rir_123_1"
+    const [type, exerciseId, setNumber] = key.split('_');
+
+    if (!currentExercise || !activeSession) return;
+
+    // Build update request with current values
+    const repsKey = `reps_${exerciseId}_${setNumber}`;
+    const weightKey = `weight_${exerciseId}_${setNumber}`;
+    const rirKey = `rir_${exerciseId}_${setNumber}`;
+
+    // Get latest values (including the one just updated)
+    const currentInputs = {
+      ...sessionInputs,
+      [key]: value,
+    };
+
+    const updateRequest: UpdateSetProgressRequest = {
+      session_id: activeSession.id,
+      exercise_id: parseInt(exerciseId),
+      set_number: parseInt(setNumber),
+      reps: currentInputs[repsKey] ? parseInt(currentInputs[repsKey]) : undefined,
+      weight: currentInputs[weightKey] ? parseFloat(currentInputs[weightKey]) : undefined,
+      rir: currentInputs[rirKey] ? parseInt(currentInputs[rirKey]) : undefined,
+    };
+
+    // Save to AsyncStorage (fire and forget - no await)
+    updateSetProgress(updateRequest).catch(err => {
+      console.error('Error persisting set progress:', err);
+    });
   };
 
   const handlePreviousExercise = async () => {

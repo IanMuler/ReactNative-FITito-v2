@@ -1,6 +1,6 @@
 import { PoolClient } from 'pg';
-import { query, getClient, transaction } from '@/config/database';
-import { EntityId, CreateInput, UpdateInput, ServiceResult } from '@/types/common';
+import { query, transaction } from '@/config/database';
+import { EntityId, CreateInput, UpdateInput } from '@/types/common';
 
 /**
  * Base Repository class with PostgreSQL implementation
@@ -19,8 +19,8 @@ export abstract class BaseRepository<T> {
         `SELECT * FROM ${this.tableName} WHERE ${this.primaryKey} = $1`,
         [id]
       );
-      
-      return result.rows.length > 0 ? result.rows[0] : null;
+
+      return (result.rows[0] ?? null) as T | null;
     } catch (error) {
       throw this.handleDatabaseError(error, 'findById');
     }
@@ -65,12 +65,12 @@ export abstract class BaseRepository<T> {
       `;
 
       const result = await query<T>(sql, values);
-      
+
       if (result.rows.length === 0) {
         throw new Error(`Failed to create entity in ${this.tableName}`);
       }
 
-      return result.rows[0];
+      return result.rows[0]!;
     } catch (error) {
       throw this.handleDatabaseError(error, 'create');
     }
@@ -96,8 +96,8 @@ export abstract class BaseRepository<T> {
 
       values.push(id);
       const result = await query<T>(sql, values);
-      
-      return result.rows.length > 0 ? result.rows[0] : null;
+
+      return (result.rows[0] ?? null) as T | null;
     } catch (error) {
       throw this.handleDatabaseError(error, 'update');
     }
@@ -127,8 +127,8 @@ export abstract class BaseRepository<T> {
       const result = await query<{ count: string }>(
         `SELECT COUNT(*) as count FROM ${this.tableName}`
       );
-      
-      return parseInt(result.rows[0].count, 10);
+
+      return parseInt(result.rows[0]!.count, 10);
     } catch (error) {
       throw this.handleDatabaseError(error, 'count');
     }
@@ -143,8 +143,8 @@ export abstract class BaseRepository<T> {
         `SELECT EXISTS(SELECT 1 FROM ${this.tableName} WHERE ${this.primaryKey} = $1) as exists`,
         [id]
       );
-      
-      return result.rows[0].exists;
+
+      return result.rows[0]!.exists;
     } catch (error) {
       throw this.handleDatabaseError(error, 'exists');
     }
@@ -215,7 +215,7 @@ export abstract class BaseRepository<T> {
   /**
    * Handle database errors consistently
    */
-  private handleDatabaseError(error: any, operation: string): Error {
+  protected handleDatabaseError(error: any, operation: string): Error {
     console.error(`Database error in ${this.tableName}.${operation}:`, error);
 
     // PostgreSQL specific error handling
@@ -277,8 +277,8 @@ export abstract class ProfileAwareRepository<T> extends BaseRepository<T> {
         `SELECT COUNT(*) as count FROM ${this.tableName} WHERE profile_id = $1`,
         [profileId]
       );
-      
-      return parseInt(result.rows[0].count, 10);
+
+      return parseInt(result.rows[0]!.count, 10);
     } catch (error) {
       throw this.handleDatabaseError(error, 'countByProfileId');
     }
@@ -287,16 +287,11 @@ export abstract class ProfileAwareRepository<T> extends BaseRepository<T> {
   /**
    * Override create to ensure profile_id is set
    */
-  async create(data: CreateInput<T> & { profile_id: number }): Promise<T> {
+  override async create(data: CreateInput<T> & { profile_id: number }): Promise<T> {
     if (!data.profile_id) {
       throw new Error('profile_id is required for profile-aware entities');
     }
-    
-    return super.create(data);
-  }
 
-  private handleDatabaseError(error: any, operation: string): Error {
-    console.error(`Database error in ${this.tableName}.${operation}:`, error);
-    return error instanceof Error ? error : new Error(String(error));
+    return super.create(data);
   }
 }

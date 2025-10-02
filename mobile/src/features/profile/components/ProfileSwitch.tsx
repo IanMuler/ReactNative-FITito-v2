@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useProfile } from '../contexts/ProfileContext';
@@ -8,21 +8,20 @@ export default function ProfileSwitch() {
   const { currentProfile, profiles, switchProfile } = useProfile();
 
   const handleProfileSwitch = () => {
-    if (!currentProfile) return;
-    
-    // Find the other profile (not current)
-    const otherProfile = profiles.find(p => p.id !== currentProfile.id);
-    if (otherProfile) {
+    const otherProfile = profiles.find(p => p.id !== currentProfile?.id);
+    if (otherProfile && currentProfile) {
       switchProfile(otherProfile.id);
+      console.log('🔄 ProfileSwitch tapped - switching to:', otherProfile.profile_name);
     }
   };
 
   if (!currentProfile) return null;
 
   return (
-    <TouchableOpacity 
-      style={styles.container} 
+    <TouchableOpacity
+      style={styles.container}
       onPress={handleProfileSwitch}
+      activeOpacity={0.7}
     >
       <LinearGradient
         colors={['#4c669f', '#3b5998', '#192f6a']}

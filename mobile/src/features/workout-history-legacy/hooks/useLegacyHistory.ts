@@ -66,6 +66,39 @@ export const useLegacyHistory = (profileId: number, date: string) => {
     }
   });
 
+  /* Delete history by date mutation (any date) */
+  const deleteHistoryMutation = useMutation({
+    mutationFn: async (dateToDelete: string) => {
+      // Convert date format from DD/MM/YYYY to YYYY-MM-DD
+      const [day, month, year] = dateToDelete.split('/');
+      const formattedDate = `${year}-${month}-${day}`;
+
+      return SessionHistoryApi.deleteSessionHistoryByDate(profileId, formattedDate);
+    },
+    onSuccess: () => {
+      // Invalidate history queries to refresh the data
+      queryClient.invalidateQueries({ queryKey: ['legacy-workout-history-v2'] });
+      queryClient.invalidateQueries({ queryKey: ['session-history'] });
+
+      Toast.show({
+        type: 'success',
+        text1: 'Histórico borrado',
+        text2: 'El histórico ha sido eliminado correctamente',
+      });
+
+      console.log('✅ [LEGACY-HOOK] History deleted successfully');
+    },
+    onError: (error: any) => {
+      Toast.show({
+        type: 'error',
+        text1: 'Error al borrar',
+        text2: error.message || 'No se pudo eliminar el histórico',
+      });
+
+      console.error('❌ [LEGACY-HOOK] Failed to delete history:', error.message);
+    }
+  });
+
   /* Derived data - mimics original filtering logic */
   const dayHistory = historyData.filter((entry: HistoryEntry) => entry.date === date);
 
@@ -78,10 +111,11 @@ export const useLegacyHistory = (profileId: number, date: string) => {
     /* States */
     isLoading,
     error,
-    isDeleting: deleteTodayHistoryMutation.isPending,
+    isDeleting: deleteTodayHistoryMutation.isPending || deleteHistoryMutation.isPending,
 
     /* Actions */
     refetch,
     deleteTodayHistory: deleteTodayHistoryMutation.mutate,
+    deleteHistory: deleteHistoryMutation.mutate,
   };
 };

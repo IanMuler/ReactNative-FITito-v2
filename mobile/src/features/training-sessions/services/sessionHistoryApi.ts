@@ -62,14 +62,20 @@ export class SessionHistoryApi {
   
   // Convert TrainingSession to SessionHistoryRequest
   static convertTrainingSessionToHistoryRequest(
-    session: TrainingSession, 
+    session: TrainingSession,
     profileId: number,
     endTime: string = new Date().toISOString()
   ): SessionHistoryRequest {
-    const sessionDate = new Date(session.start_time).toISOString().split('T')[0];
+    // Usar componentes de fecha local en lugar de ISO UTC
+    const startDate = new Date(session.start_time);
+    const year = startDate.getFullYear();
+    const month = String(startDate.getMonth() + 1).padStart(2, '0');
+    const day = String(startDate.getDate()).padStart(2, '0');
+    const sessionDate = `${year}-${month}-${day}`; // YYYY-MM-DD format
+
     const startTime = new Date(session.start_time);
     const endTimeDate = new Date(endTime);
-    const durationMinutes = Math.floor((endTimeDate.getTime() - startTime.getTime()) / (1000 * 60));
+    const durationMinutes = Math.max(1, Math.floor((endTimeDate.getTime() - startTime.getTime()) / (1000 * 60)));
 
     const totalExercises = session.exercises.length;
     const completedExercises = session.exercises.filter(ex => ex.is_completed).length;
@@ -295,6 +301,35 @@ export class SessionHistoryApi {
       });
     } catch (error) {
       console.error('❌ [SessionHistoryApi] Error deleting today\'s session history:', error);
+      throw error;
+    }
+  }
+
+  // Delete session history by date (any date)
+  static async deleteSessionHistoryByDate(profileId: number, date: string): Promise<void> {
+    try {
+      console.log('📚 [SessionHistoryApi] Deleting session history by date:', {
+        profile_id: profileId,
+        date
+      });
+
+      const response = await fetch(`${API_BASE_URL}/session-history/date?profile_id=${profileId}&date=${date}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      console.log('✅ [SessionHistoryApi] Session history deleted successfully:', {
+        routine_name: result.data.routine_name,
+        session_date: result.data.session_date
+      });
+    } catch (error) {
+      console.error('❌ [SessionHistoryApi] Error deleting session history by date:', error);
       throw error;
     }
   }

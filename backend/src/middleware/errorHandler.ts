@@ -1,9 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
-import { ApiError, ApiResponse } from '@/types/common';
-import { config } from '@/config/environment';
+import { logger } from '../utils/logger';
+import { formatError } from '../utils/responseFormatter';
 
 // Custom error class
-export class AppError extends Error implements ApiError {
+export class AppError extends Error {
   public readonly statusCode: number;
   public readonly code?: string;
   public readonly details?: Record<string, any>;
@@ -89,56 +89,35 @@ export const errorHandler = (
     code = 'DUPLICATE_FIELD';
   }
 
-  // Log error in development
-  if (config.server.isDevelopment) {
-    console.error('❌ Error:', {
-      message: error.message,
-      stack: error.stack,
-      statusCode,
-      url: req.url,
-      method: req.method,
-      ip: req.ip,
-      userAgent: req.get('User-Agent'),
-    });
-  }
+  // Log error
+  logger.error(`Error Handler: ${message}`, {
+    statusCode,
+    code,
+    url: req.url,
+    method: req.method,
+    ip: req.ip,
+    userAgent: req.get('User-Agent'),
+    stack: process.env['NODE_ENV'] !== 'production' ? error.stack : undefined,
+  });
 
-  // Create error response
-  const errorResponse: ApiResponse = {
-    success: false,
-    error: message,
-    message: `${code}: ${message}`,
-    timestamp: new Date().toISOString(),
-  };
-
-  // Include details and stack trace in development
-  if (config.server.isDevelopment) {
-    errorResponse.data = {
-      code,
-      details,
-      stack: error.stack,
-    };
-  }
+  // Create error response using formatter
+  const errorResponse = formatError(
+    code,
+    message,
+    process.env['NODE_ENV'] !== 'production' ? { details, stack: error.stack } : details
+  );
 
   res.status(statusCode).json(errorResponse);
 };
 
 // 404 handler for unmatched routes
 export const notFoundHandler = (req: Request, res: Response): void => {
-  const errorResponse: ApiResponse = {
-    success: false,
-    error: `Route ${req.method} ${req.originalUrl} not found`,
-    message: 'NOT_FOUND: The requested resource was not found',
-    timestamp: new Date().toISOString(),
-  };
+  logger.warn(`404 Not Found: ${req.method} ${req.originalUrl}`);
+
+  const errorResponse = formatError(
+    'NOT_FOUND',
+    `Route ${req.method} ${req.originalUrl} not found`
+  );
 
   res.status(404).json(errorResponse);
-};
-
-// Async error handler wrapper
-export const asyncHandler = <T extends Request, U extends Response>(
-  fn: (req: T, res: U, next: NextFunction) => Promise<any>
-) => {
-  return (req: T, res: U, next: NextFunction): void => {
-    Promise.resolve(fn(req, res, next)).catch(next);
-  };
 };

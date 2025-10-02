@@ -4,7 +4,7 @@ import { TabBarIcon } from "@/components/navigation/TabBarIcon";
 import { Colors } from "@/constants/colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { View } from "react-native";
-import ProfileSwitch from "@/components/ProfileSwitch";
+import ProfileSwitch from "@/features/profile/components/ProfileSwitch";
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();

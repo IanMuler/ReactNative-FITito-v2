@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { ApiResponse, ServiceResult } from '@/types/common';
-import { asyncHandler } from '@/middleware/errorHandler';
+import { asyncHandler } from '@/middleware/asyncHandler';
 
 /**
  * Base Controller class implementing common functionality

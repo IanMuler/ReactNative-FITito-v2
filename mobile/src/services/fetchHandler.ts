@@ -146,7 +146,7 @@ const makeRequest = async <T>(
   }
 
   // Log request start
-  logRequestStart(method, url, body);
+  // logRequestStart(method, url, body);
 
   try {
     const response = await fetch(url, requestConfig);
@@ -185,8 +185,8 @@ const makeRequest = async <T>(
     const result: ApiResponse<T> = await response.json();
     
     // Log successful request
-    const responseSize = JSON.stringify(result).length;
-    logRequestSuccess(method, url, response.status, responseSize);
+    // const responseSize = JSON.stringify(result).length;
+    // logRequestSuccess(method, url, response.status, responseSize);
     
     // Return the data from the response
     return result.data;
