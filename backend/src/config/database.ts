@@ -1,14 +1,20 @@
 import { Pool, PoolConfig } from 'pg';
 
+// Serverless-optimized configuration
+const isProduction = process.env['NODE_ENV'] === 'production';
+
 const config: PoolConfig = {
   host: process.env['DB_HOST'] || 'localhost',
   port: parseInt(process.env['DB_PORT'] || '5432'),
   database: process.env['DB_NAME'] || 'fitito_dev',
   user: process.env['DB_USER'] || 'fitito_user',
   password: process.env['DB_PASSWORD'] || 'fitito_password',
-  max: 20, // maximum number of clients in the pool
-  idleTimeoutMillis: 30000, // how long a client is allowed to remain idle before being closed
-  connectionTimeoutMillis: 2000, // how long to wait when connecting a new client
+  // Serverless-optimized: use minimal connections
+  max: isProduction ? 1 : 20,
+  idleTimeoutMillis: isProduction ? 0 : 30000,
+  connectionTimeoutMillis: 5000,
+  // Enable SSL for production databases
+  ssl: isProduction ? { rejectUnauthorized: false } : false,
 };
 
 export const pool = new Pool(config);

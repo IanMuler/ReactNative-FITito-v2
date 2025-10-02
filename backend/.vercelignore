@@ -1,0 +1,40 @@
+# Dependencies
+node_modules
+
+# Development files
+src
+*.ts
+tsconfig.json
+.env
+.env.example
+
+# Build artifacts (Vercel builds from source)
+dist
+
+# Testing
+*.test.ts
+*.spec.ts
+__tests__
+coverage
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Database
+*.sql
+database/migrations
+
+# Documentation
+README.md
+docs
