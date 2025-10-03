@@ -30,6 +30,7 @@
     "express-validator": "^7.0.1",
     "helmet": "^7.2.0",
     "morgan": "^1.10.1",
+    "pg": "^8.16.3",
     "uuid": "^9.0.1"
   },
   "devDependencies": {
@@ -40,6 +41,7 @@
     "@types/jest": "^29.5.12",
     "@types/morgan": "^1.9.9",
     "@types/node": "^20.10.0",
+    "@types/pg": "^8.15.5",
     "@types/uuid": "^9.0.7",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
