@@ -1,6 +1,11 @@
-import { PoolClient } from 'pg';
 import { query, transaction } from '@/config/database';
 import { EntityId, CreateInput, UpdateInput } from '@/types/common';
+
+// Type for database client (compatible with pg and @neondatabase/serverless)
+type DbClient = {
+  query: (text: string, params?: any[]) => Promise<{ rows: any[]; rowCount: number }>;
+};
+
 
 /**
  * Base Repository class with PostgreSQL implementation
@@ -168,7 +173,7 @@ export abstract class BaseRepository<T> {
    * Execute queries in transaction
    */
   protected async executeTransaction<R>(
-    callback: (client: PoolClient) => Promise<R>
+    callback: (client: DbClient) => Promise<R>
   ): Promise<R> {
     try {
       return await transaction(callback);

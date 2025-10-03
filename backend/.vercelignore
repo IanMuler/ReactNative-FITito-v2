@@ -2,14 +2,8 @@
 node_modules
 
 # Development files
-src
-*.ts
-tsconfig.json
 .env
 .env.example
-
-# Build artifacts (Vercel builds from source)
-dist
 
 # Testing
 *.test.ts
@@ -20,6 +14,7 @@ coverage
 # Logs
 *.log
 npm-debug.log*
+backend.log
 
 # OS files
 .DS_Store
@@ -32,9 +27,9 @@ Thumbs.db
 *.swo
 
 # Database
-*.sql
-database/migrations
+database/export
 
 # Documentation
 README.md
-docs
+VERCEL_DEPLOYMENT.md
+MIGRATION_STATUS.md

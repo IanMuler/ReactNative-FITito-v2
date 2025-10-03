@@ -3,7 +3,6 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import apiRoutes from './routes';
-import { pool } from './config/database';
 import { requestLogger } from './middleware/requestLogger';
 import { errorHandler } from './middleware/errorHandler';
 
@@ -77,18 +76,5 @@ app.use('*', (req: Request, res: Response) => {
 
 // Global error handler (must be last)
 app.use(errorHandler);
-
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM received, shutting down gracefully');
-  await pool.end();
-  process.exit(0);
-});
-
-process.on('SIGINT', async () => {
-  console.log('SIGINT received, shutting down gracefully');
-  await pool.end();
-  process.exit(0);
-});
 
 export default app;

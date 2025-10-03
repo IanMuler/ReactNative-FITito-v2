@@ -1,4 +1,4 @@
-import { PoolClient } from 'pg';
+
 import { ProfileAwareRepository } from './BaseRepository';
 import {
   TrainingDay,
@@ -58,7 +58,7 @@ export class TrainingDayRepository extends ProfileAwareRepository<TrainingDay> {
       WHERE id = $1 AND profile_id = $2
     `;
 
-    const dayResult = await this.executeQuery<TrainingDay>(dayQuery, [id, profileId]);
+    const dayResult = await this.executeQuery(dayQuery, [id, profileId]);
 
     if (dayResult.rows.length === 0) {
       return null;
@@ -116,7 +116,7 @@ export class TrainingDayRepository extends ProfileAwareRepository<TrainingDay> {
    * Original: lines 345-464
    */
   async createWithExercises(data: CreateTrainingDayDto): Promise<TrainingDay> {
-    return this.executeTransaction(async (client: PoolClient) => {
+    return this.executeTransaction(async (client) => {
       const { profile_id, name, description, exercises } = data;
 
       logger.info('Creating training day', {
@@ -139,7 +139,7 @@ export class TrainingDayRepository extends ProfileAwareRepository<TrainingDay> {
       }
 
       // Create training day
-      const dayResult = await client.query<TrainingDay>(
+      const dayResult = await client.query(
         `INSERT INTO training_days (profile_id, name, description, is_active)
          VALUES ($1, $2, $3, $4)
          RETURNING id, profile_id, name, description, is_active, created_at, updated_at`,
@@ -203,7 +203,7 @@ export class TrainingDayRepository extends ProfileAwareRepository<TrainingDay> {
     id: number,
     data: UpdateTrainingDayDto
   ): Promise<TrainingDay> {
-    return this.executeTransaction(async (client: PoolClient) => {
+    return this.executeTransaction(async (client) => {
       const { profile_id, name, description, exercises } = data;
 
       // Check if training day exists and belongs to profile
@@ -255,9 +255,9 @@ export class TrainingDayRepository extends ProfileAwareRepository<TrainingDay> {
           RETURNING id, profile_id, name, description, is_active, created_at, updated_at
         `;
 
-        dayResult = await client.query<TrainingDay>(updateQuery, updateValues);
+        dayResult = await client.query(updateQuery, updateValues);
       } else {
-        dayResult = await client.query<TrainingDay>(
+        dayResult = await client.query(
           `SELECT id, profile_id, name, description, is_active, created_at, updated_at
            FROM training_days WHERE id = $1`,
           [id]

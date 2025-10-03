@@ -1,32 +1,20 @@
-import { Pool, PoolConfig } from 'pg';
+import { Pool } from '@neondatabase/serverless';
 
 // Serverless-optimized configuration
 const isProduction = process.env['NODE_ENV'] === 'production';
 
-const config: PoolConfig = {
-  host: process.env['DB_HOST'] || 'localhost',
-  port: parseInt(process.env['DB_PORT'] || '5432'),
-  database: process.env['DB_NAME'] || 'fitito_dev',
-  user: process.env['DB_USER'] || 'fitito_user',
-  password: process.env['DB_PASSWORD'] || 'fitito_password',
-  // Serverless-optimized: use minimal connections
-  max: isProduction ? 1 : 20,
+const connectionString = process.env['DATABASE_URL'];
+
+if (!connectionString) {
+  throw new Error('DATABASE_URL environment variable is not defined');
+}
+
+// Use Neon's Pool which is compatible with node-postgres
+export const pool = new Pool({
+  connectionString,
+  max: isProduction ? 1 : 10,
   idleTimeoutMillis: isProduction ? 0 : 30000,
   connectionTimeoutMillis: 5000,
-  // Enable SSL for production databases
-  ssl: isProduction ? { rejectUnauthorized: false } : false,
-};
-
-export const pool = new Pool(config);
-
-// Test connection
-pool.on('connect', () => {
-  console.log('Connected to PostgreSQL database');
-});
-
-pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err);
-  process.exit(-1);
 });
 
 /**

@@ -5,7 +5,7 @@
  * Uses stored functions for upsert and retrieval operations.
  */
 
-import { PoolClient } from 'pg';
+
 import { ProfileAwareRepository } from './BaseRepository';
 import {
   SessionHistory,
@@ -226,7 +226,7 @@ export class SessionHistoryRepository extends ProfileAwareRepository<SessionHist
     profileId: number,
     date: string
   ): Promise<DeleteTodaySessionResult> {
-    return this.executeTransaction(async (client: PoolClient) => {
+    return this.executeTransaction(async (client) => {
       // Validate that the date is today
       const today = new Date().toISOString().split('T')[0];
       if (date !== today) {

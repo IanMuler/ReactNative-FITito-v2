@@ -1,4 +1,4 @@
-import { PoolClient } from 'pg';
+
 import { ProfileAwareRepository } from './BaseRepository';
 import {
   RoutineWeek,
@@ -22,7 +22,7 @@ export class RoutineWeekRepository extends ProfileAwareRepository<RoutineWeek> {
    * Original: lines 1136-1147
    */
   async initializeWeeks(profileId: number): Promise<RoutineWeek[]> {
-    return this.executeTransaction(async (client: PoolClient) => {
+    return this.executeTransaction(async (client) => {
       // Check if already exists
       const existingWeeks = await client.query(
         `SELECT COUNT(*) as count FROM routine_weeks WHERE profile_id = $1`,
@@ -38,7 +38,7 @@ export class RoutineWeekRepository extends ProfileAwareRepository<RoutineWeek> {
       const routineWeeks: RoutineWeek[] = [];
 
       for (let i = 0; i < dayNames.length; i++) {
-        const result = await client.query<RoutineWeek>(
+        const result = await client.query(
           `INSERT INTO routine_weeks (profile_id, day_of_week, day_name, is_rest_day, routine_id)
            VALUES ($1, $2, $3, $4, $5)
            RETURNING id, profile_id, day_of_week, day_name, is_rest_day, routine_id, routine_name, training_day_id, exercises_config, created_at, updated_at`,
@@ -93,7 +93,7 @@ export class RoutineWeekRepository extends ProfileAwareRepository<RoutineWeek> {
    * Original: lines 1310-1360
    */
   async updateWeek(id: number, data: UpdateRoutineWeekDto): Promise<RoutineWeek> {
-    return this.executeTransaction(async (client: PoolClient) => {
+    return this.executeTransaction(async (client) => {
       const { profile_id, routine_id, training_day_id, is_rest_day } = data;
 
       let finalRoutineId = routine_id;
@@ -154,7 +154,7 @@ export class RoutineWeekRepository extends ProfileAwareRepository<RoutineWeek> {
       updateFields.push('updated_at = CURRENT_TIMESTAMP');
       updateValues.push(id, profile_id);
 
-      const result = await client.query<RoutineWeek>(
+      const result = await client.query(
         `UPDATE routine_weeks
          SET ${updateFields.join(', ')}
          WHERE id = $${paramCount} AND profile_id = $${paramCount + 1}
@@ -217,7 +217,7 @@ export class RoutineWeekRepository extends ProfileAwareRepository<RoutineWeek> {
     trainingDayId: number,
     profileId: number
   ): Promise<ExerciseConfigItem[]> {
-    return this.executeTransaction(async (client: PoolClient) => {
+    return this.executeTransaction(async (client) => {
       // Verify routine week belongs to profile
       const routineWeekCheck = await client.query(
         `SELECT id FROM routine_weeks WHERE id = $1 AND profile_id = $2`,
@@ -307,7 +307,7 @@ export class RoutineWeekRepository extends ProfileAwareRepository<RoutineWeek> {
     }>,
     routineName: string | null
   ): Promise<ExerciseConfigItem[]> {
-    return this.executeTransaction(async (client: PoolClient) => {
+    return this.executeTransaction(async (client) => {
       // Verify routine week belongs to profile
       const routineWeekCheck = await client.query(
         `SELECT id FROM routine_weeks WHERE id = $1 AND profile_id = $2`,
@@ -415,6 +415,6 @@ export class RoutineWeekRepository extends ProfileAwareRepository<RoutineWeek> {
     }
 
     logger.info('Deleted routine week configuration', { routineWeekId: id });
-    return result.rows.length;
+    return result.rowCount;
   }
 }

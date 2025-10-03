@@ -1,4 +1,4 @@
-import { PoolClient } from 'pg';
+
 import { ProfileAwareRepository } from './BaseRepository';
 import {
   Routine,
@@ -65,7 +65,7 @@ export class RoutineRepository extends ProfileAwareRepository<Routine> {
       WHERE id = $1 AND profile_id = $2
     `;
 
-    const routineResult = await this.executeQuery<Routine>(routineQuery, [id, profileId]);
+    const routineResult = await this.executeQuery(routineQuery, [id, profileId]);
 
     if (routineResult.rows.length === 0) {
       return null;
@@ -133,7 +133,7 @@ export class RoutineRepository extends ProfileAwareRepository<Routine> {
    * Original: lines 781-883
    */
   async createWithExercises(data: CreateRoutineDto): Promise<Routine> {
-    return this.executeTransaction(async (client: PoolClient) => {
+    return this.executeTransaction(async (client) => {
       const {
         profile_id,
         name,
@@ -154,7 +154,7 @@ export class RoutineRepository extends ProfileAwareRepository<Routine> {
         [exerciseIds]
       );
 
-      const existingIds = existingExercises.rows.map(row => row.id);
+      const existingIds = existingExercises.rows.map((row: any) => row.id);
       const missingIds = exerciseIds.filter(id => !existingIds.includes(id));
 
       if (missingIds.length > 0) {
@@ -162,7 +162,7 @@ export class RoutineRepository extends ProfileAwareRepository<Routine> {
       }
 
       // Create routine
-      const routineResult = await client.query<Routine>(
+      const routineResult = await client.query(
         `INSERT INTO routines (profile_id, name, description, color, duration_minutes, difficulty_level, is_favorite, tags, notes, is_active)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING id, profile_id, name, description, color, duration_minutes, difficulty_level, is_favorite, tags, notes, is_active, created_at, updated_at`,
@@ -202,7 +202,7 @@ export class RoutineRepository extends ProfileAwareRepository<Routine> {
       await Promise.all(exercisePromises);
 
       logger.info('Routine created successfully', { id: routineId });
-      return routineResult.rows[0];
+      return routineResult.rows[0] as Routine;
     });
   }
 
@@ -214,7 +214,7 @@ export class RoutineRepository extends ProfileAwareRepository<Routine> {
     id: number,
     data: UpdateRoutineDto
   ): Promise<Routine> {
-    return this.executeTransaction(async (client: PoolClient) => {
+    return this.executeTransaction(async (client) => {
       const {
         profile_id,
         name,
@@ -287,9 +287,9 @@ export class RoutineRepository extends ProfileAwareRepository<Routine> {
           RETURNING id, profile_id, name, description, color, duration_minutes, difficulty_level, is_favorite, tags, notes, is_active, created_at, updated_at
         `;
 
-        routineResult = await client.query<Routine>(updateQuery, updateValues);
+        routineResult = await client.query(updateQuery, updateValues);
       } else {
-        routineResult = await client.query<Routine>(
+        routineResult = await client.query(
           `SELECT id, profile_id, name, description, color, duration_minutes, difficulty_level, is_favorite, tags, notes, is_active, created_at, updated_at
            FROM routines WHERE id = $1`,
           [id]
@@ -313,7 +313,7 @@ export class RoutineRepository extends ProfileAwareRepository<Routine> {
           [exerciseIds]
         );
 
-        const existingIds = existingExercises.rows.map(row => row.id);
+        const existingIds = existingExercises.rows.map((row: any) => row.id);
         const missingIds = exerciseIds.filter(id => !existingIds.includes(id));
 
         if (missingIds.length > 0) {
@@ -350,7 +350,7 @@ export class RoutineRepository extends ProfileAwareRepository<Routine> {
       }
 
       logger.info('Routine updated successfully', { id });
-      return routineResult.rows[0];
+      return routineResult.rows[0] as Routine;
     });
   }
 
