@@ -188,7 +188,10 @@ export const useWeekSchedule = () => {
 
     // Use the unified DELETE configuration endpoint to completely clear the day
     try {
-      const response = await fetch(`http://192.168.1.50:3000/api/v1/routine-weeks/${routineWeek.id}/configuration?profile_id=${profileId}`, {
+      // Use environment variable for API URL, fallback to local development URL
+      const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.50:3000/api/v1';
+
+      const response = await fetch(`${API_BASE_URL}/routine-weeks/${routineWeek.id}/configuration?profile_id=${profileId}`, {
         method: 'DELETE',
       });
       

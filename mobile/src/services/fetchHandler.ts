@@ -3,7 +3,8 @@
  * Encapsulates common HTTP logic and provides error logging
  */
 
-const API_BASE_URL = 'http://192.168.1.50:3000/api/v1';
+// Use environment variable for API URL, fallback to local development URL
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.50:3000/api/v1';
 
 interface ApiResponse<T> {
   success: boolean;

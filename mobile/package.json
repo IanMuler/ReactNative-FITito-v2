@@ -14,7 +14,18 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "type-check": "tsc --noEmit",
-    "prepare": "husky"
+    "prepare": "husky",
+    "build:configure": "npx eas build:configure",
+    "build:android:development": "npx eas build --platform android --profile development",
+    "build:android:preview": "npx eas build --platform android --profile preview",
+    "build:android:production": "npx eas build --platform android --profile production",
+    "build:ios:development": "npx eas build --platform ios --profile development",
+    "build:ios:preview": "npx eas build --platform ios --profile preview",
+    "build:ios:production": "npx eas build --platform ios --profile production",
+    "build:all:preview": "npx eas build --platform all --profile preview",
+    "build:all:production": "npx eas build --platform all --profile production",
+    "submit:android": "npx eas submit --platform android",
+    "submit:ios": "npx eas submit --platform ios"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
@@ -23,6 +34,7 @@
     "@react-native-picker/picker": "^2.11.2",
     "@tanstack/react-query": "^5.90.2",
     "expo": "~54.0.10",
+    "expo-dev-client": "~6.0.12",
     "expo-font": "~14.0.8",
     "expo-image-picker": "^17.0.8",
     "expo-linear-gradient": "~15.0.7",

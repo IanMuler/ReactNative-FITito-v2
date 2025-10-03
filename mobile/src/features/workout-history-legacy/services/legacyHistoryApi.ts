@@ -2,7 +2,8 @@
 
 import { HistoryEntry, ExerciseDetail, SetDetail, PerformedSetDetail } from '../types';
 
-const API_BASE_URL = 'http://192.168.1.50:3000/api/v1';
+// Use environment variable for API URL, fallback to local development URL
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.50:3000/api/v1';
 
 /* Helper: Transform session history response to legacy format */
 const transformSessionHistoryToLegacy = (sessionHistoryData: any[], originalDate: string): HistoryEntry[] => {

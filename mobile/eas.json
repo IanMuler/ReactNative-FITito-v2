@@ -1,20 +1,35 @@
 {
   "cli": {
-    "version": ">= 10.1.0"
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk",
-        "gradleCommand": ":app:assembleRelease"
+        "image": "latest"
+      },
+      "node": "20.17.0",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://fitito-backend-fx1851mc7-ianmulers-projects.vercel.app/api/v1"
       }
     },
-    "production": {}
+    "production": {
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://fitito-backend-fx1851mc7-ianmulers-projects.vercel.app/api/v1"
+      }
+    }
   },
   "submit": {
     "production": {}
