@@ -1,4 +1,3 @@
 // Global/shared hooks will be exported here
-// Example:
-// export { useApi } from './useApi';
-// export { useStorage } from './useStorage';
+export { useNetworkStatus } from './useNetworkStatus';
+export { useColorScheme } from './useColorScheme';

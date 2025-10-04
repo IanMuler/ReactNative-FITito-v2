@@ -14,11 +14,6 @@ export const routineApi = {
     return fetchHandler.get<RoutineWeek[]>('/routine-weeks', { profile_id: profileId.toString() });
   },
 
-  // Initialize default week schedule for a profile
-  initializeWeekSchedule: async (profileId: number): Promise<RoutineWeek[]> => {
-    return fetchHandler.post<RoutineWeek[]>('/routine-weeks/initialize', { profile_id: profileId });
-  },
-
   // Update routine week (assign/remove routine, toggle rest day)
   updateRoutineWeek: async (
     routineWeekId: number, 

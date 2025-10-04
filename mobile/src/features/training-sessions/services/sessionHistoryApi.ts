@@ -1,7 +1,5 @@
 import { TrainingSession } from '../types';
-
-// Use environment variable for API URL, fallback to local development URL
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.50:3000/api/v1';
+import { fetchHandler } from '@/services/fetchHandler';
 
 export interface SessionHistoryRequest {
   profile_id: number;
@@ -131,30 +129,22 @@ export class SessionHistoryApi {
         duration_minutes: request.duration_minutes
       });
 
-      const response = await fetch(`${API_BASE_URL}/session-history`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(request),
-      });
+      const result = await fetchHandler.post<{ id: number; profile_id: number; session_date: string; status: string }>('/session-history', request);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      
       console.log('✅ [SessionHistoryApi] Session synced successfully:', {
-        id: result.data.id,
-        session_date: result.data.session_date,
-        status: result.data.status
+        id: result.id,
+        session_date: result.session_date,
+        status: result.status
       });
 
-      return result.data;
+      return result;
     } catch (error) {
-      console.error('❌ [SessionHistoryApi] Error syncing session history:', error);
+      // Check if this is expected offline behavior
+      if (error instanceof Error && error.message === 'OFFLINE_MODE') {
+        console.log('📴 [Offline] Cannot sync now, will sync when network is available');
+      } else {
+        console.error('❌ [SessionHistoryApi] Error syncing session history:', error);
+      }
       throw error;
     }
   }
@@ -167,21 +157,17 @@ export class SessionHistoryApi {
         limit
       });
 
-      const response = await fetch(`${API_BASE_URL}/session-history?profile_id=${profileId}&limit=${limit}`);
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      
-      console.log('✅ [SessionHistoryApi] Retrieved session history:', {
-        profile_id: profileId,
-        count: result.count
+      const result = await fetchHandler.get<SessionHistoryResponse[]>('/session-history', {
+        profile_id: profileId.toString(),
+        limit: limit.toString()
       });
 
-      return result.data;
+      console.log('✅ [SessionHistoryApi] Retrieved session history:', {
+        profile_id: profileId,
+        count: result.length
+      });
+
+      return result;
     } catch (error) {
       console.error('❌ [SessionHistoryApi] Error getting session history:', error);
       throw error;
@@ -190,31 +176,39 @@ export class SessionHistoryApi {
 
   // Get session history for specific date
   static async getSessionHistoryByDate(profileId: number, date: string): Promise<DetailedSessionHistoryResponse | null> {
+    // Try to fetch from backend first
     try {
-      console.log('📚 [SessionHistoryApi] Getting session history by date:', {
-        profile_id: profileId,
-        date
+      const result = await fetchHandler.get<DetailedSessionHistoryResponse[]>('/session-history', {
+        profile_id: profileId.toString(),
+        date: date
       });
 
-      const response = await fetch(`${API_BASE_URL}/session-history?profile_id=${profileId}&date=${date}`);
+      const backendData = result.length > 0 ? result[0] : null;
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      if (backendData) {
+        console.log('✅ [SessionHistoryApi] Retrieved from backend:', { date });
       }
 
-      const result = await response.json();
-      
-      console.log('✅ [SessionHistoryApi] Retrieved session history by date:', {
-        profile_id: profileId,
-        date,
-        found: result.data.length > 0
-      });
-
-      return result.data.length > 0 ? result.data[0] : null;
+      return backendData;
     } catch (error) {
-      console.error('❌ [SessionHistoryApi] Error getting session history by date:', error);
-      throw error;
+      // Backend fetch failed - try offline storage
+      console.log('📴 [Offline] Backend unavailable, checking local storage...', { date });
+
+      try {
+        const { SessionHistoryStorage } = await import('./sessionHistoryStorage');
+        const offlineData = await SessionHistoryStorage.getOfflineHistory(profileId, date);
+
+        if (offlineData) {
+          console.log('✅ [Offline] Retrieved from local storage:', { date });
+          return offlineData;
+        } else {
+          console.log('📭 [Offline] No data in local storage for date:', { date });
+          return null;
+        }
+      } catch (storageError) {
+        console.error('❌ [Offline] Error reading from local storage:', storageError);
+        return null;
+      }
     }
   }
 
@@ -226,22 +220,17 @@ export class SessionHistoryApi {
         profile_id: profileId
       });
 
-      const response = await fetch(`${API_BASE_URL}/session-history/${sessionId}?profile_id=${profileId}`);
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      
-      console.log('✅ [SessionHistoryApi] Retrieved session history details:', {
-        session_id: sessionId,
-        routine_name: result.data.routine_name,
-        status: result.data.status
+      const result = await fetchHandler.get<DetailedSessionHistoryResponse>(`/session-history/${sessionId}`, {
+        profile_id: profileId.toString()
       });
 
-      return result.data;
+      console.log('✅ [SessionHistoryApi] Retrieved session history details:', {
+        session_id: sessionId,
+        routine_name: result.routine_name,
+        status: result.status
+      });
+
+      return result;
     } catch (error) {
       console.error('❌ [SessionHistoryApi] Error getting session history details:', error);
       throw error;
@@ -256,20 +245,12 @@ export class SessionHistoryApi {
         profile_id: profileId
       });
 
-      const response = await fetch(`${API_BASE_URL}/session-history/${sessionId}?profile_id=${profileId}`, {
-        method: 'DELETE',
+      await fetchHandler.delete<void>(`/session-history/${sessionId}`, {
+        profile_id: profileId.toString()
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-
       console.log('✅ [SessionHistoryApi] Session history deleted successfully:', {
-        session_id: sessionId,
-        routine_name: result.data.routine_name
+        session_id: sessionId
       });
     } catch (error) {
       console.error('❌ [SessionHistoryApi] Error deleting session history:', error);
@@ -285,21 +266,12 @@ export class SessionHistoryApi {
         date
       });
 
-      const response = await fetch(`${API_BASE_URL}/session-history/today?profile_id=${profileId}&date=${date}`, {
-        method: 'DELETE',
+      await fetchHandler.delete<void>('/session-history/today', {
+        profile_id: profileId.toString(),
+        date: date
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-
-      console.log('✅ [SessionHistoryApi] Today\'s session history deleted successfully:', {
-        routine_name: result.data.routine_name,
-        session_date: result.data.session_date
-      });
+      console.log('✅ [SessionHistoryApi] Today\'s session history deleted successfully');
     } catch (error) {
       console.error('❌ [SessionHistoryApi] Error deleting today\'s session history:', error);
       throw error;
@@ -314,21 +286,12 @@ export class SessionHistoryApi {
         date
       });
 
-      const response = await fetch(`${API_BASE_URL}/session-history/date?profile_id=${profileId}&date=${date}`, {
-        method: 'DELETE',
+      await fetchHandler.delete<void>('/session-history/date', {
+        profile_id: profileId.toString(),
+        date: date
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-
-      console.log('✅ [SessionHistoryApi] Session history deleted successfully:', {
-        routine_name: result.data.routine_name,
-        session_date: result.data.session_date
-      });
+      console.log('✅ [SessionHistoryApi] Session history deleted successfully');
     } catch (error) {
       console.error('❌ [SessionHistoryApi] Error deleting session history by date:', error);
       throw error;

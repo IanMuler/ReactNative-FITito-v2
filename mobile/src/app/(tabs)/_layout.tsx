@@ -1,13 +1,25 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Tabs } from "expo-router";
 import { TabBarIcon } from "@/components/navigation/TabBarIcon";
 import { Colors } from "@/constants/colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import { View } from "react-native";
 import ProfileSwitch from "@/features/profile/components/ProfileSwitch";
+import { useQueryClient } from '@tanstack/react-query';
+import { useProfile } from '@/features/profile';
+import { dataPrefetchService } from '@/services/dataPrefetch';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const queryClient = useQueryClient();
+  const { profileId } = useProfile();
+
+  useEffect(() => {
+    if (profileId) {
+      // Prefetch critical data when profile is available
+      dataPrefetchService.prefetchCriticalData(queryClient, profileId);
+    }
+  }, [profileId, queryClient]);
 
   return (
     <View style={{ flex: 1 }}>

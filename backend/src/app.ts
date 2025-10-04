@@ -55,7 +55,6 @@ app.use('*', (req: Request, res: Response) => {
         'DELETE /api/v1/routines/:id': 'Delete routine'
       },
       routineWeeks: {
-        'POST /api/v1/routine-weeks/initialize': 'Initialize routine weeks',
         'GET /api/v1/routine-weeks': 'Get routine weeks',
         'PUT /api/v1/routine-weeks/:id': 'Update routine week',
         'PUT /api/v1/routine-weeks/:id/complete': 'Mark week as completed'

@@ -8,6 +8,7 @@ import {
   Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from "@expo/vector-icons";
 import LinearGradientItem from "@/components/ui/LinearGradientItem";
 import Menu, { MenuItem } from "@/components/ui/Menu";
@@ -27,6 +28,7 @@ import { routineConfigurationApi } from '@/features/routine-configurations/servi
 const RoutineScreen = () => {
   const [iconsLoaded, setIconsLoaded] = useState(false);
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { currentProfile, profileId, profiles } = useProfile();
   
   /* Business Logic */
@@ -193,20 +195,23 @@ const RoutineScreen = () => {
 
       if (otherProfile) {
         try {
-          // Obtener la semana de rutinas del otro perfil
-          const otherRoutineWeeks = await routineApi.getWeekSchedule(otherProfile.id);
-          const today = new Date();
-          const todayDayIndex = today.getDay(); // 0 = Sunday, 6 = Saturday
+          // Obtener la semana de rutinas del otro perfil desde cache (funciona offline)
+          const otherRoutineWeeks = queryClient.getQueryData(['routine-weeks', otherProfile.id]) as any[];
 
-          // Encontrar el día actual en la semana del otro perfil
-          const otherProfileCurrentDay = otherRoutineWeeks.find(week => week.day_of_week === todayDayIndex);
+          if (otherRoutineWeeks) {
+            const today = new Date();
+            const todayDayIndex = today.getDay(); // 0 = Sunday, 6 = Saturday
 
-          // Verificar si tiene entreno asignado y no es día de descanso
-          if (otherProfileCurrentDay && otherProfileCurrentDay.routine_id && !otherProfileCurrentDay.is_rest_day) {
-            // Verificar que no tenga sesión activa ya
-            const otherProfileActiveSession = await TrainingSessionAsyncStorage.getActiveSession(otherProfile.id);
-            if (!otherProfileActiveSession) {
-              otherProfileHasTraining = true;
+            // Encontrar el día actual en la semana del otro perfil
+            const otherProfileCurrentDay = otherRoutineWeeks.find(week => week.day_of_week === todayDayIndex);
+
+            // Verificar si tiene entreno asignado y no es día de descanso
+            if (otherProfileCurrentDay && otherProfileCurrentDay.routine_id && !otherProfileCurrentDay.is_rest_day) {
+              // Verificar que no tenga sesión activa ya
+              const otherProfileActiveSession = await TrainingSessionAsyncStorage.getActiveSession(otherProfile.id);
+              if (!otherProfileActiveSession) {
+                otherProfileHasTraining = true;
+              }
             }
           }
         } catch (error) {
@@ -320,16 +325,22 @@ const RoutineScreen = () => {
 
       await createSession(sessionData);
 
-      // Obtener datos del otro perfil
-      const otherRoutineWeeks = await routineApi.getWeekSchedule(otherProfileId);
+      // Obtener datos del otro perfil desde cache (funciona offline)
+      const otherRoutineWeeks = queryClient.getQueryData(['routine-weeks', otherProfileId]) as any[];
+
+      if (!otherRoutineWeeks) {
+        console.error('No cached routine weeks found for other profile');
+        throw new Error('No se pudo obtener la rutina del otro perfil');
+      }
+
       const today = new Date();
       const todayDayIndex = today.getDay();
       const otherProfileCurrentDay = otherRoutineWeeks.find(week => week.day_of_week === todayDayIndex);
 
       if (otherProfileCurrentDay && otherProfileCurrentDay.routine_id) {
-        // Obtener configuración del otro perfil
+        // Obtener configuración del otro perfil desde cache (funciona offline)
         const otherRoutineWeekId = otherProfileCurrentDay.id;
-        const otherConfiguration = await routineConfigurationApi.getConfiguration(otherRoutineWeekId, otherProfileId);
+        const otherConfiguration = queryClient.getQueryData(['routine-configuration', otherRoutineWeekId, otherProfileId]) as any;
 
         if (otherConfiguration && otherConfiguration.exercises && otherConfiguration.exercises.length > 0) {
           const otherTrainingSessionDayOfWeek = convertDayOfWeekForTrainingSession(otherProfileCurrentDay.day_of_week);
@@ -469,16 +480,6 @@ const RoutineScreen = () => {
     </View>
   );
 
-  const floatingSettingsButton = iconsLoaded && (
-    <TouchableOpacity
-      style={styles.floatingButton}
-      onPress={() => router.push("/(tabs)/rutina/management")}
-      testID="button-settings"
-    >
-      <Ionicons name="settings" size={24} color="white" />
-    </TouchableOpacity>
-  );
-
   const sessionButtons = (
     <View style={styles.buttonContainer}>
       <TouchableOpacity
@@ -576,7 +577,6 @@ const RoutineScreen = () => {
         ))}
       </ScrollView>
       {sessionButtons}
-      {floatingSettingsButton}
     </View>
   );
 };
@@ -685,14 +685,6 @@ const styles = StyleSheet.create({
   ellipsisContainer: {
     position: 'relative',
     zIndex: 2,
-  },
-  floatingButton: {
-    position: "absolute",
-    top: 40,
-    right: 20,
-    backgroundColor: "#2979FF",
-    padding: 10,
-    borderRadius: 20,
   },
   centered: {
     flex: 1,

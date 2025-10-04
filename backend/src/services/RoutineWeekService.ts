@@ -5,22 +5,11 @@ import {
   UpdateRoutineWeekDto,
   ConfigurationResponse,
   ExerciseConfigItem,
-  InitializeConfigDto,
   UpdateConfigDto,
 } from '@/types/routine-week';
-import { logger } from '@/utils/logger';
 
 export class RoutineWeekService {
   constructor(private repository: RoutineWeekRepository) {}
-
-  async initializeForProfile(profileId: number): Promise<RoutineWeek[]> {
-    if (!profileId) {
-      throw new Error('profile_id is required');
-    }
-
-    logger.info('Initializing routine weeks for profile', { profileId });
-    return this.repository.initializeWeeks(profileId);
-  }
 
   async getAllForProfile(profileId: number): Promise<RoutineWeekWithDetails[]> {
     if (!profileId) {
@@ -50,14 +39,6 @@ export class RoutineWeekService {
     }
 
     return result;
-  }
-
-  async initializeConfiguration(id: number, data: InitializeConfigDto): Promise<ExerciseConfigItem[]> {
-    if (!data.profile_id || !data.training_day_id) {
-      throw new Error('profile_id and training_day_id are required');
-    }
-
-    return this.repository.initializeConfiguration(id, data.training_day_id, data.profile_id);
   }
 
   async updateConfiguration(id: number, data: UpdateConfigDto): Promise<ExerciseConfigItem[]> {

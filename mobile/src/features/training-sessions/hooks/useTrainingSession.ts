@@ -29,12 +29,12 @@ export const useTrainingSession = (profileId?: number) => {
       const session = await TrainingSessionAsyncStorage.getActiveSession(profileId);
       setActiveSession(session);
 
-      console.log('📱 [useTrainingSession] Loaded active session:', {
-        hasSession: !!session,
-        sessionId: session?.id,
-        profileId: session?.profile_id,
-        status: session?.status
-      });
+      // console.log('📱 [useTrainingSession] Loaded active session:', {
+      //   hasSession: !!session,
+      //   sessionId: session?.id,
+      //   profileId: session?.profile_id,
+      //   status: session?.status
+      // });
     } catch (err) {
       console.error('❌ Error loading active session:', err);
       setError('Failed to load active session');

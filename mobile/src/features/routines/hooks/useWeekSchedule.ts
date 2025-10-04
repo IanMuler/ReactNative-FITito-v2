@@ -35,24 +35,6 @@ export const useWeekSchedule = () => {
   });
 
   /* Mutations */
-  const initializeMutation = useMutation({
-    mutationFn: () => routineApi.initializeWeekSchedule(profileId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['routine-weeks', profileId] });
-      Toast.show({
-        type: 'success',
-        text1: 'Horario semanal inicializado',
-      });
-    },
-    onError: (error: any) => {
-      Toast.show({
-        type: 'error',
-        text1: 'Error al inicializar horario',
-        text2: error.message,
-      });
-    },
-  });
-
   const updateWeekMutation = useMutation({
     mutationFn: ({ routineWeekId, update }: { routineWeekId: number, update: any }) =>
       routineApi.updateRoutineWeek(routineWeekId, update),
@@ -215,13 +197,6 @@ export const useWeekSchedule = () => {
     }
   }, [routineWeeks, profileId, queryClient]);
 
-  /* Initialize schedule if empty */
-  useEffect(() => {
-    if (profileId && !isLoading && !routineWeeks.length && !error) {
-      initializeMutation.mutate();
-    }
-  }, [profileId, isLoading, routineWeeks.length, error]);
-
   /* Helper to get routine week info for current day */
   const getCurrentRoutineWeekInfo = useCallback(() => {
     if (!routineWeeks.length) return null;
@@ -277,7 +252,7 @@ export const useWeekSchedule = () => {
     routineWeeks, // Add raw routine weeks data
 
     // States
-    isLoading: isLoading || initializeMutation.isPending,
+    isLoading,
     error,
     isUpdating: updateWeekMutation.isPending,
 
@@ -292,6 +267,5 @@ export const useWeekSchedule = () => {
     assignRoutineToDay,
     assignTrainingDayToDay,
     removeRoutineFromDay,
-    initializeSchedule: () => initializeMutation.mutate(),
   };
 };

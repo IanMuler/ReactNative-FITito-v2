@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TrainingSession, CreateTrainingSessionRequest, UpdateSetProgressRequest, TrainingSessionExercise, PerformedSet } from '../types';
-import { SessionHistoryApi } from './sessionHistoryApi';
+import { SessionHistoryApi, DetailedSessionHistoryResponse } from './sessionHistoryApi';
+import { offlineMutationManager } from '@/services/offlineMutationManager';
+import { SessionHistoryStorage } from './sessionHistoryStorage';
 
 const STORAGE_KEYS = {
   ACTIVE_SESSION: (profileId: number) => `@training_session:active_${profileId}`,
@@ -238,22 +240,68 @@ export class TrainingSessionAsyncStorage {
         status: 'completed',
       });
 
+      // Convert to session history request format
+      const sessionHistoryRequest = SessionHistoryApi.convertTrainingSessionToHistoryRequest(
+        completedSession,
+        profileId,
+        endTime
+      );
+
       // Sync to database
       try {
-        await SessionHistoryApi.syncTrainingSession(completedSession, profileId, endTime);
+        await SessionHistoryApi.syncSessionHistory(sessionHistoryRequest);
         console.log('✅ [AsyncStorage] Session synced to database successfully');
       } catch (syncError) {
-        console.error('⚠️ [AsyncStorage] Failed to sync to database, but session completed locally:', syncError);
-        // Don't throw error - session should still complete locally even if sync fails
+        console.log('📴 [Offline] Session will sync when online, saving locally...');
+
+        // Queue mutation for offline sync
+        try {
+          await offlineMutationManager.queueMutation('COMPLETE_SESSION', sessionHistoryRequest);
+          console.log('✅ [Offline] Session queued for sync');
+        } catch (queueError) {
+          console.error('❌ [Offline] Failed to queue mutation:', queueError);
+        }
+
+        // Save to offline storage for immediate availability
+        try {
+          const offlineHistory: DetailedSessionHistoryResponse = {
+            id: 0, // Placeholder for offline
+            session_uuid: sessionHistoryRequest.session_uuid,
+            session_date: sessionHistoryRequest.session_date,
+            routine_name: sessionHistoryRequest.routine_name,
+            day_name: sessionHistoryRequest.day_name,
+            status: sessionHistoryRequest.status,
+            start_time: sessionHistoryRequest.start_time,
+            end_time: sessionHistoryRequest.end_time,
+            duration_minutes: sessionHistoryRequest.duration_minutes,
+            total_exercises: sessionHistoryRequest.total_exercises || 0,
+            completed_exercises: sessionHistoryRequest.completed_exercises || 0,
+            total_sets: sessionHistoryRequest.total_sets || 0,
+            completed_sets: sessionHistoryRequest.completed_sets || 0,
+            notes: sessionHistoryRequest.notes,
+            session_data: sessionHistoryRequest.session_data,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+
+          await SessionHistoryStorage.saveOfflineHistory(
+            profileId,
+            sessionHistoryRequest.session_date,
+            offlineHistory
+          );
+          console.log('✅ [Offline] Session saved locally, will appear in history');
+        } catch (storageError) {
+          console.error('❌ [Offline] Failed to save to local storage:', storageError);
+          // Continue anyway - mutation is queued
+        }
       }
 
-      // Clear active session for this profile - history is only in database
+      // Clear active session for this profile
       await AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_SESSION(profileId));
 
-      console.log('✅ [AsyncStorage] Session completed and synced to database:', {
+      console.log('✅ [AsyncStorage] Session completed:', {
         id: completedSession.id,
         routine_name: completedSession.routine_name,
-        synced_to_db: !!profileId
       });
     } catch (error) {
       console.error('❌ Error completing session in AsyncStorage:', error);

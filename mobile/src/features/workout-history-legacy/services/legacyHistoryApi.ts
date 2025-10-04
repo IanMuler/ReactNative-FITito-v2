@@ -1,9 +1,7 @@
 /* Legacy History API Service - Transforms session-history to AsyncStorage format */
 
 import { HistoryEntry, ExerciseDetail, SetDetail, PerformedSetDetail } from '../types';
-
-// Use environment variable for API URL, fallback to local development URL
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.50:3000/api/v1';
+import { fetchHandler } from '@/services/fetchHandler';
 
 /* Helper: Transform session history response to legacy format */
 const transformSessionHistoryToLegacy = (sessionHistoryData: any[], originalDate: string): HistoryEntry[] => {
@@ -47,18 +45,12 @@ export const legacyHistoryApi = {
     const [day, month, year] = date.split('/');
     const formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
 
-    const response = await fetch(
-      `${API_BASE_URL}/session-history?profile_id=${profileId}&date=${formattedDate}`
-    );
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to get session history');
-    }
-
-    const result = await response.json();
+    const result = await fetchHandler.get<any[]>('/session-history', {
+      profile_id: profileId.toString(),
+      date: formattedDate
+    });
 
     // Transform new session-history format to legacy format
-    return transformSessionHistoryToLegacy(result.data || [], date);
+    return transformSessionHistoryToLegacy(result || [], date);
   },
 };

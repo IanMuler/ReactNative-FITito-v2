@@ -1,55 +1,53 @@
 /* Workout History API Service */
 
 import { WorkoutSession, WorkoutHistoryOptions } from '../types';
-
-// Use environment variable for API URL, fallback to local development URL
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.50:3000/api/v1';
+import { fetchHandler } from '@/services/fetchHandler';
 
 export const workoutHistoryApi = {
   // Get workout session by specific date
   getWorkoutByDate: async (profileId: number, date: string): Promise<WorkoutSession | null> => {
     console.log('📅 [API] Getting workout history for date:', { profileId, date });
-    
-    const response = await fetch(
-      `${API_BASE_URL}/workout-sessions/by-date?profile_id=${profileId}&date=${date}`
-    );
-    
-    if (!response.ok) {
-      const error = await response.json();
+
+    try {
+      const result = await fetchHandler.get<WorkoutSession | null>('/workout-sessions/by-date', {
+        profile_id: profileId.toString(),
+        date: date
+      });
+
+      console.log('✅ [API] Workout history by date:', result ? 'Found' : 'Not found');
+      return result;
+    } catch (error) {
       console.error('❌ [API] Failed to get workout by date:', error);
-      throw new Error(error.message || 'Failed to get workout history by date');
+      throw error;
     }
-    
-    const result = await response.json();
-    console.log('✅ [API] Workout history by date:', result.data ? 'Found' : 'Not found');
-    
-    return result.data;
   },
 
   // Get workout sessions history list
   getWorkoutHistory: async (
-    profileId: number, 
+    profileId: number,
     options?: WorkoutHistoryOptions
   ): Promise<WorkoutSession[]> => {
     console.log('📚 [API] Getting workout history list:', { profileId, options });
-    
-    const params = new URLSearchParams({
-      profile_id: profileId.toString(),
-      ...(options?.daysBack && { days_back: options.daysBack.toString() }),
-      ...(options?.limit && { limit: options.limit.toString() }),
-    });
-    
-    const response = await fetch(`${API_BASE_URL}/workout-sessions?${params}`);
-    
-    if (!response.ok) {
-      const error = await response.json();
+
+    try {
+      const params: Record<string, string> = {
+        profile_id: profileId.toString(),
+      };
+
+      if (options?.daysBack) {
+        params.days_back = options.daysBack.toString();
+      }
+      if (options?.limit) {
+        params.limit = options.limit.toString();
+      }
+
+      const result = await fetchHandler.get<WorkoutSession[]>('/workout-sessions', params);
+
+      console.log('✅ [API] Workout history list:', `${result.length} sessions`);
+      return result;
+    } catch (error) {
       console.error('❌ [API] Failed to get workout history:', error);
-      throw new Error(error.message || 'Failed to get workout history');
+      throw error;
     }
-    
-    const result = await response.json();
-    console.log('✅ [API] Workout history list:', `${result.data.length} sessions`);
-    
-    return result.data;
   },
 };

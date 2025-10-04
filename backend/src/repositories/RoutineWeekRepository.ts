@@ -18,46 +18,6 @@ export class RoutineWeekRepository extends ProfileAwareRepository<RoutineWeek> {
   protected primaryKey = 'id';
 
   /**
-   * Initialize routine weeks for a profile (create 7 days)
-   * Original: lines 1136-1147
-   */
-  async initializeWeeks(profileId: number): Promise<RoutineWeek[]> {
-    return this.executeTransaction(async (client) => {
-      // Check if already exists
-      const existingWeeks = await client.query(
-        `SELECT COUNT(*) as count FROM routine_weeks WHERE profile_id = $1`,
-        [profileId]
-      );
-
-      if (parseInt(existingWeeks.rows[0].count) > 0) {
-        throw new Error('Routine weeks already initialized for this profile');
-      }
-
-      // Create 7 days
-      const dayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
-      const routineWeeks: RoutineWeek[] = [];
-
-      for (let i = 0; i < dayNames.length; i++) {
-        const result = await client.query(
-          `INSERT INTO routine_weeks (profile_id, day_of_week, day_name, is_rest_day, routine_id)
-           VALUES ($1, $2, $3, $4, $5)
-           RETURNING id, profile_id, day_of_week, day_name, is_rest_day, routine_id, routine_name, training_day_id, exercises_config, created_at, updated_at`,
-          [profileId, i + 1, dayNames[i], false, null]
-        );
-
-        if (!result.rows[0]) {
-          throw new Error('Failed to create routine week');
-        }
-
-        routineWeeks.push(result.rows[0]!);
-      }
-
-      logger.info('Initialized routine weeks for profile', { profileId });
-      return routineWeeks;
-    });
-  }
-
-  /**
    * Get all routine weeks for a profile
    * Original: lines 1183-1204
    */
@@ -205,91 +165,6 @@ export class RoutineWeekRepository extends ProfileAwareRepository<RoutineWeek> {
       },
       exercises,
     };
-  }
-
-  /**
-   * Initialize routine week configuration from training day
-   * Original: lines 1565-1639
-   * Replicates stored function logic: initialize_routine_day_configuration() + get_routine_day_configuration()
-   */
-  async initializeConfiguration(
-    id: number,
-    trainingDayId: number,
-    profileId: number
-  ): Promise<ExerciseConfigItem[]> {
-    return this.executeTransaction(async (client) => {
-      // Verify routine week belongs to profile
-      const routineWeekCheck = await client.query(
-        `SELECT id FROM routine_weeks WHERE id = $1 AND profile_id = $2`,
-        [id, profileId]
-      );
-
-      if (routineWeekCheck.rows.length === 0) {
-        throw new Error('Routine week not found or does not belong to this profile');
-      }
-
-      // Verify training day belongs to profile
-      const trainingDayCheck = await client.query(
-        `SELECT id, name FROM training_days WHERE id = $1 AND profile_id = $2 AND is_active = true`,
-        [trainingDayId, profileId]
-      );
-
-      if (trainingDayCheck.rows.length === 0) {
-        throw new Error('Training day not found or does not belong to this profile');
-      }
-
-      const trainingDay = trainingDayCheck.rows[0]!;
-
-      // Get all exercises from training_day_exercises
-      const exercisesResult = await client.query(
-        `SELECT
-          tde.exercise_id,
-          tde.order_index,
-          e.name as exercise_name,
-          e.image as exercise_image
-         FROM training_day_exercises tde
-         JOIN exercises e ON e.id = tde.exercise_id
-         WHERE tde.training_day_id = $1
-         ORDER BY tde.order_index`,
-        [trainingDayId]
-      );
-
-      // Build exercises config array
-      const exercisesConfig: ExerciseConfigItem[] = exercisesResult.rows.map((row) => ({
-        exercise_id: row['exercise_id'] as number,
-        exercise_name: row['exercise_name'] as string,
-        exercise_image: row['exercise_image'] as string,
-        order_index: row['order_index'] as number,
-        sets_config: [],
-        notes: '',
-      }));
-
-      // Update routine week with configuration
-      await client.query(
-        `UPDATE routine_weeks
-         SET
-           training_day_id = $1,
-           routine_name = $2,
-           exercises_config = $3,
-           updated_at = CURRENT_TIMESTAMP
-         WHERE id = $4 AND profile_id = $5`,
-        [
-          trainingDayId,
-          trainingDay['name'] as string,
-          JSON.stringify(exercisesConfig),
-          id,
-          profileId,
-        ]
-      );
-
-      logger.info('Initialized routine week configuration', {
-        routineWeekId: id,
-        trainingDayId,
-        exerciseCount: exercisesConfig.length,
-      });
-
-      return exercisesConfig;
-    });
   }
 
   /**

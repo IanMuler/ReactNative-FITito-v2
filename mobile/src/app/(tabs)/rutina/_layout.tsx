@@ -9,7 +9,6 @@ export default function StackLayout() {
       <Stack.Screen name="asignar-entreno" />
       <Stack.Screen name="configurar-entreno" />
       <Stack.Screen name="historico" />
-      <Stack.Screen name="management" />
     </Stack>
   );
 }

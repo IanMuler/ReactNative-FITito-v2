@@ -7,29 +7,6 @@ export class RoutineWeekController {
   constructor(private service: RoutineWeekService) {}
 
   /**
-   * POST /api/v1/routine-weeks/initialize
-   */
-  initialize = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const { profile_id } = req.body;
-
-    if (!profile_id) {
-      sendError(res, 'profile_id is required', 400);
-      return;
-    }
-
-    try {
-      const data = await this.service.initializeForProfile(profile_id);
-      sendSuccess(res, data, 'Routine weeks initialized successfully', 201);
-    } catch (error: any) {
-      if (error.message.includes('already initialized')) {
-        sendError(res, error.message, 409);
-      } else {
-        throw error;
-      }
-    }
-  });
-
-  /**
    * GET /api/v1/routine-weeks?profile_id=X
    */
   getAll = asyncHandler(async (req: Request, res: Response): Promise<void> => {
@@ -82,26 +59,6 @@ export class RoutineWeekController {
     } catch (error: any) {
       if (error.message.includes('not found')) {
         sendNotFound(res, error.message);
-      } else {
-        throw error;
-      }
-    }
-  });
-
-  /**
-   * POST /api/v1/routine-weeks/:id/configuration/initialize
-   */
-  initializeConfiguration = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const id = parseInt(req.params['id'] as string);
-
-    try {
-      const data = await this.service.initializeConfiguration(id, req.body);
-      sendSuccess(res, data, 'Routine day configuration initialized successfully', 201);
-    } catch (error: any) {
-      if (error.message.includes('not found')) {
-        sendNotFound(res, error.message);
-      } else if (error.message.includes('required')) {
-        sendError(res, error.message, 400);
       } else {
         throw error;
       }

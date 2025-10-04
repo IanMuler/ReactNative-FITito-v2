@@ -1,7 +1,10 @@
 /**
  * Centralized fetch handler for API requests
  * Encapsulates common HTTP logic and provides error logging
+ * Includes offline detection to prevent fetch attempts when network is unavailable
  */
+
+import NetInfo from '@react-native-community/netinfo';
 
 // Use environment variable for API URL, fallback to local development URL
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.50:3000/api/v1';
@@ -107,9 +110,10 @@ const buildQueryParams = (params: Record<string, string>): string => {
 
 /**
  * Makes HTTP requests with centralized error handling and logging
+ * Checks network connectivity before attempting fetch
  */
 const makeRequest = async <T>(
-  endpoint: string, 
+  endpoint: string,
   options: FetchOptions = {}
 ): Promise<T> => {
   const {
@@ -118,6 +122,17 @@ const makeRequest = async <T>(
     headers = {},
     params
   } = options;
+
+  // Check network connectivity before attempting fetch
+  const networkState = await NetInfo.fetch();
+  if (!networkState.isConnected || !networkState.isInternetReachable) {
+    console.log('📴 [Offline] Network unavailable, skipping fetch:', {
+      endpoint,
+      method,
+      timestamp: new Date().toISOString(),
+    });
+    throw new Error('OFFLINE_MODE');
+  }
 
   // Build URL with query parameters if provided
   let url = `${API_BASE_URL}${endpoint}`;
@@ -257,8 +272,9 @@ export const fetchHandler = {
   /**
    * DELETE request
    */
-  delete: <T>(endpoint: string, headers?: Record<string, string>): Promise<T> => {
-    return makeRequest<T>(endpoint, { method: 'DELETE', headers });
+  delete: <T>(endpoint: string, paramsOrHeaders?: Record<string, string>): Promise<T> => {
+    // Support both params (query parameters) and headers for DELETE requests
+    return makeRequest<T>(endpoint, { method: 'DELETE', params: paramsOrHeaders });
   },
 
   /**
